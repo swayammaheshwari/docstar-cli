@@ -1,7 +1,7 @@
 {
   "name": "docstar-cli",
   "description": "A new CLI generated with oclif",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "author": "Swayam Maheshwari",
   "bin": {
     "docstar-cli": "./bin/run.js"
