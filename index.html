@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>docstar-cli — call your APIs from the terminal</title>
+<meta name="description" content="docstar-cli turns published DocStar API docs into real terminal commands. Discover modules, list endpoints, and call them with a single line." />
+<style>
+  :root {
+    --bg: #0b0d12;
+    --bg-elevated: #12151c;
+    --bg-card: #161a23;
+    --border: #242938;
+    --text: #e7e9ee;
+    --text-dim: #9aa3b5;
+    --text-faint: #626b80;
+    --accent: #7c5cff;
+    --accent-2: #34d3a3;
+    --accent-3: #ff8a4c;
+    --mono: "SF Mono", "Fira Code", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+    --radius: 14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(700px 400px at 15% -10%, rgba(124, 92, 255, 0.25), transparent 60%),
+      radial-gradient(600px 400px at 100% 0%, rgba(52, 211, 163, 0.14), transparent 55%);
+  }
+
+  a { color: inherit; }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* ---------- nav ---------- */
+  header.nav {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    backdrop-filter: blur(10px);
+    background: rgba(11, 13, 18, 0.75);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 17px;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+  }
+
+  .brand .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 3px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 0 16px rgba(124, 92, 255, 0.7);
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 28px;
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  .nav-links a { text-decoration: none; transition: color 0.15s; }
+  .nav-links a:hover { color: var(--text); }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+    border: 1px solid var(--border);
+    transition: transform 0.15s, border-color 0.15s, background 0.15s;
+    white-space: nowrap;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #5a3fe0);
+    border-color: transparent;
+    color: white;
+  }
+
+  .btn-primary:hover { transform: translateY(-1px); }
+
+  .btn-ghost { color: var(--text); }
+  .btn-ghost:hover { border-color: #3a4155; background: var(--bg-card); }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: 96px 0 64px;
+    text-align: center;
+  }
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 28px;
+  }
+
+  .eyebrow .pulse {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-2);
+    box-shadow: 0 0 0 0 rgba(52, 211, 163, 0.6);
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(52, 211, 163, 0.5); }
+    70% { box-shadow: 0 0 0 8px rgba(52, 211, 163, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(52, 211, 163, 0); }
+  }
+
+  h1 {
+    font-size: clamp(36px, 6vw, 64px);
+    line-height: 1.06;
+    letter-spacing: -0.03em;
+    margin: 0 0 22px;
+    font-weight: 800;
+  }
+
+  h1 .grad {
+    background: linear-gradient(135deg, var(--accent) 10%, var(--accent-2) 60%, var(--accent-3) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .hero p.lede {
+    max-width: 620px;
+    margin: 0 auto 40px;
+    color: var(--text-dim);
+    font-size: 18px;
+  }
+
+  .hero-actions {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 56px;
+  }
+
+  /* ---------- terminal ---------- */
+  .terminal {
+    max-width: 720px;
+    margin: 0 auto;
+    text-align: left;
+    background: #0d0f15;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 30px 80px -30px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.02);
+    overflow: hidden;
+  }
+
+  .terminal-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--bg-elevated);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .terminal-bar .tdot { width: 11px; height: 11px; border-radius: 50%; }
+  .tdot.r { background: #ff5f57; }
+  .tdot.y { background: #febc2e; }
+  .tdot.g { background: #28c840; }
+
+  .terminal-title {
+    margin: 0 auto;
+    font-size: 12px;
+    color: var(--text-faint);
+    font-family: var(--mono);
+  }
+
+  .terminal-body {
+    padding: 22px 24px 26px;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    color: #d3d8e2;
+    min-height: 260px;
+  }
+
+  .terminal-body .line { margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; }
+  .terminal-body .prompt { color: var(--accent-2); }
+  .terminal-body .cmd { color: #fff; }
+  .terminal-body .out { color: var(--text-dim); }
+  .terminal-body .ok { color: var(--accent-2); }
+  .terminal-body .muted { color: var(--text-faint); }
+  .caret {
+    display: inline-block;
+    width: 7px;
+    height: 14px;
+    background: var(--accent-2);
+    vertical-align: -2px;
+    animation: blink 1s steps(1) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ---------- sections ---------- */
+  section { padding: 84px 0; }
+  section.tight { padding: 40px 0 84px; }
+
+  .section-head { max-width: 620px; margin: 0 auto 56px; text-align: center; }
+  .section-head .kicker {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-2);
+    margin-bottom: 12px;
+  }
+  .section-head h2 {
+    font-size: clamp(26px, 4vw, 38px);
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+    font-weight: 800;
+  }
+  .section-head p { color: var(--text-dim); font-size: 16px; margin: 0; }
+
+  /* ---------- steps ---------- */
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 20px;
+  }
+
+  @media (max-width: 900px) {
+    .steps { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 560px) {
+    .steps { grid-template-columns: 1fr; }
+  }
+
+  .step {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 26px 22px;
+    position: relative;
+    transition: transform 0.2s, border-color 0.2s;
+  }
+  .step:hover { transform: translateY(-4px); border-color: #3a4155; }
+
+  .step .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #0b0d12;
+    font-weight: 800;
+    font-size: 14px;
+    margin-bottom: 18px;
+  }
+
+  .step h3 { font-size: 16px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  .step p { font-size: 14px; color: var(--text-dim); margin: 0; }
+  .step code {
+    display: block;
+    margin-top: 14px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    color: var(--accent-2);
+    overflow-x: auto;
+  }
+
+  /* ---------- flow diagram ---------- */
+  .flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 56px;
+  }
+  .flow .node {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 16px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+  }
+  .flow .arrow { color: var(--text-faint); font-size: 18px; }
+
+  /* ---------- features ---------- */
+  .features {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+  @media (max-width: 860px) { .features { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px) { .features { grid-template-columns: 1fr; } }
+
+  .feature {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+  }
+  .feature .icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(124, 92, 255, 0.12);
+    color: var(--accent);
+    margin-bottom: 16px;
+    font-size: 18px;
+  }
+  .feature h3 { font-size: 15.5px; margin: 0 0 6px; }
+  .feature p { font-size: 13.5px; color: var(--text-dim); margin: 0; }
+
+  /* ---------- code compare ---------- */
+  .compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+  @media (max-width: 760px) { .compare { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  .panel-head {
+    padding: 14px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-head.bad { color: var(--accent-3); }
+  .panel-head.good { color: var(--accent-2); }
+  .panel pre {
+    margin: 0;
+    padding: 18px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--text-dim);
+    overflow-x: auto;
+    line-height: 1.7;
+  }
+  .panel pre .hi { color: var(--text); }
+
+  /* ---------- cta ---------- */
+  .cta {
+    text-align: center;
+    background: linear-gradient(180deg, var(--bg-elevated), var(--bg));
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 64px 32px;
+  }
+  .cta h2 { font-size: clamp(24px, 4vw, 34px); margin: 0 0 14px; letter-spacing: -0.02em; }
+  .cta p { color: var(--text-dim); margin: 0 0 32px; }
+
+  .install-box {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    background: #0d0f15;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 18px;
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--accent-2);
+  }
+  .install-box .copy-btn {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: var(--sans);
+  }
+  .install-box .copy-btn:hover { color: var(--text); }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 36px 0;
+    color: var(--text-faint);
+    font-size: 13px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  footer a { text-decoration: none; color: var(--text-dim); }
+  footer a:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-inner">
+    <a class="brand" href="#top"><span class="dot"></span>docstar-cli</a>
+    <nav class="nav-links">
+      <a href="#how">How it works</a>
+      <a href="#features">Features</a>
+      <a href="#compare">Why</a>
+    </nav>
+    <a class="btn btn-ghost" href="https://github.com/swayammaheshwari/docstar-cli" target="_blank" rel="noopener">GitHub ↗</a>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero wrap">
+    <span class="eyebrow"><span class="pulse"></span> Turn published docs into runnable commands</span>
+    <h1>Your API docs,<br /><span class="grad">now a terminal command.</span></h1>
+    <p class="lede">
+      docstar-cli reads a DocStar docs site, discovers its published modules and endpoints,
+      and installs each one as a real CLI command — required parameters and all.
+    </p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#how">See how it works</a>
+      <a class="btn btn-ghost" href="#features">Explore features</a>
+    </div>
+
+    <div class="terminal">
+      <div class="terminal-bar">
+        <span class="tdot r"></span><span class="tdot y"></span><span class="tdot g"></span>
+        <span class="terminal-title">zsh — docstar-cli</span>
+      </div>
+      <div class="terminal-body" id="termBody"></div>
+    </div>
+  </section>
+
+  <section id="how" class="wrap">
+    <div class="section-head">
+      <span class="kicker">How it works</span>
+      <h2>From docs site to terminal command in four steps</h2>
+      <p>No SDKs to install, no request-building boilerplate — the CLI does that for you.</p>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <h3>Point it at your docs</h3>
+        <p>Run <code style="display:inline">init</code> against any DocStar site.</p>
+        <code>docstar-cli init docs.msg91.com</code>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <h3>Pick your modules</h3>
+        <p>An interactive checklist shows every published module — pick what you need.</p>
+        <code>◉ Slack (slack)
+◉ Twilio (twilio)</code>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <h3>List what's installed</h3>
+        <p>Every module gets its own <code style="display:inline">list</code> command.</p>
+        <code>docstar-cli slack list</code>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <h3>Call it directly</h3>
+        <p>Pass flags, or leave them out and get prompted for what's required.</p>
+        <code>docstar-cli slack send-message \
+  --MY_SECRET_KEY "hi 👋"</code>
+      </div>
+    </div>
+
+    <div class="flow">
+      <span class="node">docs.msg91.com</span>
+      <span class="arrow">→</span>
+      <span class="node">module.json</span>
+      <span class="arrow">→</span>
+      <span class="node">~/.docstar/</span>
+      <span class="arrow">→</span>
+      <span class="node">real CLI command</span>
+      <span class="arrow">→</span>
+      <span class="node">live API call</span>
+    </div>
+  </section>
+
+  <section id="features" class="wrap">
+    <div class="section-head">
+      <span class="kicker">Under the hood</span>
+      <h2>Built for how APIs are actually documented</h2>
+    </div>
+
+    <div class="features">
+      <div class="feature">
+        <div class="icon">⚡</div>
+        <h3>Zero-boilerplate calls</h3>
+        <p>Method, URL, headers, and body are all derived from the published endpoint — you just supply the values.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🧭</div>
+        <h3>Interactive by default</h3>
+        <p>Skip a required flag and the CLI will ask for it, so a command works even before you've read the docs.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">📦</div>
+        <h3>Local-first</h3>
+        <p>Modules are saved to <code style="font-family:var(--mono); background:none; color:var(--accent-2)">~/.docstar</code> after install — no round-trip to the docs site to run a command.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🗂️</div>
+        <h3>Organized by module</h3>
+        <p>Every module gets its own command namespace, plus a <code style="font-family:var(--mono); background:none; color:var(--accent-2)">list</code> command to browse it.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🔐</div>
+        <h3>Safe by design</h3>
+        <p>Only published, non-deleted endpoints are exposed — never drafts, internal notes, or raw credentials.</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🔄</div>
+        <h3>Always in sync</h3>
+        <p>Re-run <code style="font-family:var(--mono); background:none; color:var(--accent-2)">init</code> any time to pick up newly published endpoints.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="compare" class="wrap tight">
+    <div class="section-head">
+      <span class="kicker">Why docstar-cli</span>
+      <h2>Skip the copy-paste-curl loop</h2>
+    </div>
+
+    <div class="compare">
+      <div class="panel">
+        <div class="panel-head bad">✕ Without docstar-cli</div>
+        <pre>1. open the docs page
+2. copy the curl example
+3. swap in your base URL
+4. find the auth header
+5. paste your secret
+6. fix the JSON body
+7. finally run it</pre>
+      </div>
+      <div class="panel">
+        <div class="panel-head good">✓ With docstar-cli</div>
+        <pre><span class="hi">$ docstar-cli slack send-message-1</span>
+? Enter value for MY_SECRET_KEY <span class="hi">▊</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="cta">
+      <h2>Install it and try it on your own docs</h2>
+      <p>Works with any DocStar-published documentation site.</p>
+      <div class="install-box">
+        <span id="installCmd">npm install -g docstar-cli</span>
+        <button class="copy-btn" onclick="copyInstall()">Copy</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="wrap">
+  <span>docstar-cli — built on <a href="https://oclif.io" target="_blank" rel="noopener">oclif</a></span>
+  <a href="https://github.com/swayammaheshwari/docstar-cli" target="_blank" rel="noopener">View source on GitHub</a>
+</footer>
+
+<script>
+  function copyInstall() {
+    const text = document.getElementById('installCmd').textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = document.querySelector('.copy-btn');
+      const original = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => (btn.textContent = original), 1400);
+    });
+  }
+
+  const script = [
+    {type: 'cmd', text: 'docstar-cli init docs.msg91.com'},
+    {type: 'out', text: 'Fetching modules from https://docs.msg91.com/module.json ...'},
+    {type: 'out', text: '✔ Select modules to install  Slack (slack)'},
+    {type: 'out', text: 'Fetching slack ...'},
+    {type: 'muted', text: '  registered command: docstar-cli slack send-message-1'},
+    {type: 'muted', text: '  registered command: docstar-cli slack list'},
+    {type: 'ok', text: 'Installed 1 module(s).'},
+    {type: 'gap'},
+    {type: 'cmd', text: 'docstar-cli slack list'},
+    {type: 'out', text: 'send-message-1'},
+    {type: 'muted', text: '  send message'},
+    {type: 'muted', text: '  POST'},
+    {type: 'muted', text: '  required: MY_SECRET_KEY'},
+    {type: 'gap'},
+    {type: 'cmd', text: 'docstar-cli slack send-message-1 --MY_SECRET_KEY "hi 👋"'},
+    {type: 'ok', text: '{ "status": 200, "body": { "ok": true } }'},
+  ];
+
+  const term = document.getElementById('termBody');
+  let li = 0, ci = 0;
+
+  function render() {
+    term.innerHTML = '';
+    for (let i = 0; i < li; i++) {
+      const item = script[i];
+      const div = document.createElement('div');
+      div.className = 'line';
+      if (item.type === 'gap') { div.innerHTML = '&nbsp;'; term.appendChild(div); continue; }
+      if (item.type === 'cmd') {
+        div.innerHTML = '<span class="prompt">➜</span> <span class="cmd">' + item.text + '</span>';
+      } else {
+        div.innerHTML = '<span class="' + item.type + '">' + item.text + '</span>';
+      }
+      term.appendChild(div);
+    }
+
+    if (li < script.length) {
+      const current = script[li];
+      const div = document.createElement('div');
+      div.className = 'line';
+      if (current.type === 'gap') {
+        div.innerHTML = '&nbsp;';
+        term.appendChild(div);
+        li++; ci = 0;
+        setTimeout(render, 120);
+        return;
+      }
+      const partial = current.text.slice(0, ci);
+      if (current.type === 'cmd') {
+        div.innerHTML = '<span class="prompt">➜</span> <span class="cmd">' + partial + '</span><span class="caret"></span>';
+      } else {
+        div.innerHTML = '<span class="' + current.type + '">' + partial + '</span><span class="caret"></span>';
+      }
+      term.appendChild(div);
+
+      if (ci < current.text.length) {
+        ci++;
+        setTimeout(render, current.type === 'cmd' ? 28 : 6);
+      } else {
+        li++; ci = 0;
+        setTimeout(render, current.type === 'cmd' ? 260 : 160);
+      }
+    } else {
+      setTimeout(() => { li = 0; ci = 0; render(); }, 2600);
+    }
+  }
+
+  render();
+</script>
+
+</body>
+</html>
