@@ -46,40 +46,10 @@ ${flagLines}
 `
 }
 
-const listCommandFileContent = (modulePathSegment: string): string => `import {Command} from '@oclif/core'
-import {loadModule} from '../../lib/http.js'
-
-export default class GeneratedList extends Command {
-  static description = 'List installed APIs for the ${modulePathSegment} module'
-
-  async run() {
-    const moduleJson = await loadModule('${modulePathSegment}')
-
-    for (const endpoint of moduleJson.endpoints) {
-      const {cli} = endpoint
-      this.log(\`\${cli.command.name}\${cli.command.aliases.filter((alias) => alias !== cli.command.name).length > 0 ? \` (aliases: \${cli.command.aliases.filter((alias) => alias !== cli.command.name).join(', ')})\` : ''}\`)
-      if (cli.description) this.log(\`  \${cli.description}\`)
-      this.log(\`  \${endpoint.method}\`)
-      if (cli.parameters.required.length > 0) this.log(\`  required: \${cli.parameters.required.join(', ')}\`)
-      if (cli.parameters.optional.length > 0) this.log(\`  optional: \${cli.parameters.optional.join(', ')}\`)
-      this.log('')
-    }
-  }
-}
-`
-
 export const generateCommandFile = async (cliRoot: string, modulePathSegment: string, endpoint: EndpointContract): Promise<string> => {
   const dir = join(cliRoot, 'dist', 'commands', modulePathSegment)
   await mkdir(dir, {recursive: true})
   const filePath = join(dir, `${endpoint.cli.command.name}.js`)
   await writeFile(filePath, commandFileContent(modulePathSegment, endpoint))
-  return filePath
-}
-
-export const generateListCommandFile = async (cliRoot: string, modulePathSegment: string): Promise<string> => {
-  const dir = join(cliRoot, 'dist', 'commands', modulePathSegment)
-  await mkdir(dir, {recursive: true})
-  const filePath = join(dir, 'list.js')
-  await writeFile(filePath, listCommandFileContent(modulePathSegment))
   return filePath
 }

@@ -1,7 +1,7 @@
 import {checkbox} from '@inquirer/prompts'
 import {Args, Command, Flags} from '@oclif/core'
 import {mkdir, writeFile} from 'node:fs/promises'
-import {generateCommandFile, generateListCommandFile} from '../lib/codegen.js'
+import {generateCommandFile} from '../lib/codegen.js'
 import {configDir, configPath, modulePath} from '../lib/paths.js'
 import type {ModuleJson, ModuleSummary, SavedConfig} from '../lib/types.js'
 
@@ -21,7 +21,10 @@ export default class Init extends Command {
   static override args = {
     domain: Args.string({description: 'DocStar docs domain, e.g. docs.msg91.com or localhost:3000', required: true}),
   }
-  static override description = 'Discover published modules for a DocStar docs site, pick which ones to install, and register their CLI commands'
+  static override description = [
+    'Discover published modules for a DocStar docs site, pick which ones to install, and register their CLI commands.',
+    'After installing, run `docstar-cli list` to see what got installed, or `docstar-cli <module> <command>` to call an endpoint.',
+  ].join('\n')
   static override examples = [
     '<%= config.bin %> <%= command.id %> docs.msg91.com',
     '<%= config.bin %> <%= command.id %> localhost:3000 --collectionId paM4R4A26Hvb',
@@ -81,9 +84,6 @@ export default class Init extends Command {
         const filePath = await generateCommandFile(this.config.root, path, endpoint)
         this.log(`  registered command: ${this.config.bin} ${path} ${endpoint.cli.command.name} -> ${filePath}`)
       }
-
-      await generateListCommandFile(this.config.root, path)
-      this.log(`  registered command: ${this.config.bin} ${path} list`)
 
       selectedModules.push({name: moduleJson.module.name, path})
     }

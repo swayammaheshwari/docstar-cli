@@ -1,6 +1,6 @@
 {
   "name": "docstar-cli",
-  "description": "A new CLI generated with oclif",
+  "description": "Call published DocStar API endpoints directly from your terminal, or expose them as MCP tools for AI clients.",
   "version": "1.0.1",
   "author": "Swayam Maheshwari",
   "bin": {
@@ -56,11 +56,9 @@
       "@oclif/plugin-plugins"
     ],
     "topicSeparator": " ",
-    "topics": {
-      "hello": {
-        "description": "Say hello to the world and others"
-      }
-    }
+    "additionalVersionFlags": [
+      "-v"
+    ]
   },
   "repository": "swayammaheshwari/docstar-cli",
   "scripts": {

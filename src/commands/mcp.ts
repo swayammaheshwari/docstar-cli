@@ -17,8 +17,16 @@ const buildInputShape = (required: string[], optional: string[]): Record<string,
 }
 
 export default class Mcp extends Command {
-  static override description = 'Start an MCP server exposing every installed endpoint as a tool for AI clients (Claude Desktop, Claude Code, etc.)'
-  static override examples = ['<%= config.bin %> <%= command.id %>']
+  static override description = [
+    'Start an MCP (Model Context Protocol) server exposing every installed endpoint as a callable tool for AI clients (Claude Desktop, Claude Code, etc.).',
+    'Each endpoint becomes one tool named `<module>__<command>`, e.g. `slack__send-message-1`. Run `docstar-cli init <domain>` first so there is at least one installed module to expose.',
+    'This command does not exit on its own — it stays running and communicates over stdio for as long as the connecting AI client keeps the connection open.',
+  ].join('\n')
+  static override examples = [
+    '<%= config.bin %> <%= command.id %>',
+    '# Then register it in an MCP client config, e.g. .mcp.json:',
+    '# { "mcpServers": { "docstar": { "command": "docstar-cli", "args": ["mcp"] } } }',
+  ]
 
   public async run(): Promise<void> {
     let savedConfig: SavedConfig
