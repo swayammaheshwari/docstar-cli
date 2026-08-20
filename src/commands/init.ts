@@ -47,7 +47,14 @@ export default class Init extends Command {
     }
 
     const selectedPaths = await checkbox({
-      choices: listResponse.modules.map((module) => ({checked: true, name: `${module.name} (${module.path})`, value: module.path})),
+      choices: listResponse.modules.map((module) => {
+        const count = module.endpointCount ?? module.endpoints?.length ?? 0
+        return {
+          checked: true,
+          name: `${module.name} (${module.path}) — ${count} endpoint${count === 1 ? '' : 's'}`,
+          value: module.path,
+        }
+      }),
       message: 'Select modules to install (space to toggle, enter to confirm)',
     })
 

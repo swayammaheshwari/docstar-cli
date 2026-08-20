@@ -25,7 +25,12 @@ export type ModuleJson = {
   endpoints: EndpointContract[]
 }
 
-export type ModuleSummary = {name: string; path: string}
+export type ModuleSummary = {
+  name: string
+  path: string
+  endpointCount?: number
+  endpoints?: {name: string; path: string}[]
+}
 
 export type SavedConfig = {
   baseUrl: string
