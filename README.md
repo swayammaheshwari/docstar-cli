@@ -64,6 +64,34 @@ docstar-cli slack send-message-1
 
 The command prints the response status and body from the actual API call.
 
+## Use from an AI client (MCP)
+
+`docstar-cli` can run as an [MCP](https://modelcontextprotocol.io) server, turning every installed
+endpoint into a proper tool an AI client can call directly — no shell access required.
+
+```sh
+docstar-cli mcp
+```
+
+Register it with Claude Code (`.mcp.json`) or Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "docstar": {
+      "command": "docstar-cli",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Each installed endpoint becomes one tool named `<module>__<command>` (e.g. `slack__send-message-1`),
+with required/optional parameters exposed in its schema. A prompt like "call the slack api and
+send a message saying hi" resolves directly to that tool call — the AI client asks you for any
+required value it can't infer, exactly like any other MCP tool. Run `docstar-cli init` first so
+there's at least one installed module for `mcp` to expose.
+
 ## How it works
 
 - `docstar-cli init` talks to `GET /p/module.json?collectionId=...` (list of modules) and `GET /p/<module>/module.json?collectionId=...` (a module's endpoint contract) on the docs site.
