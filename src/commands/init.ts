@@ -1,9 +1,9 @@
 import {checkbox} from '@inquirer/prompts'
 import {Args, Command, Flags} from '@oclif/core'
-import {mkdir, writeFile} from 'node:fs/promises'
+import {mkdir, readFile, writeFile} from 'node:fs/promises'
 import {generateCommandFile} from '../lib/codegen.js'
 import {configDir, configPath, modulePath} from '../lib/paths.js'
-import type {ModuleJson, ModuleSummary, SavedConfig} from '../lib/types.js'
+import type {CollectionConfig, CollectionSummary, ModuleJson, ModuleSummary, SavedConfig} from '../lib/types.js'
 
 const buildBaseUrl = (domain: string): string => {
   if (domain.startsWith('http://') || domain.startsWith('https://')) return domain.replace(/\/$/, '')
@@ -17,13 +17,22 @@ const fetchJson = async <T>(url: string): Promise<T> => {
   return (await response.json()) as T
 }
 
+const readSavedConfig = async (): Promise<SavedConfig> => {
+  try {
+    return JSON.parse(await readFile(configPath(), 'utf8')) as SavedConfig
+  } catch {
+    return {collections: []}
+  }
+}
+
 export default class Init extends Command {
   static override args = {
     domain: Args.string({description: 'DocStar docs domain, e.g. docs.msg91.com or localhost:3000', required: true}),
   }
   static override description = [
     'Discover published modules for a DocStar docs site, pick which ones to install, and register their CLI commands.',
-    'After installing, run `docstar-cli list` to see what got installed, or `docstar-cli <module> <command>` to call an endpoint.',
+    'You can run this against multiple docs sites/collections — each is kept separate under its own CLI name (`docstar-cli <cli-name> <module> <command>`).',
+    'After installing, run `docstar-cli list` to see what got installed.',
   ].join('\n')
   static override examples = [
     '<%= config.bin %> <%= command.id %> docs.msg91.com',
@@ -42,12 +51,18 @@ export default class Init extends Command {
 
     this.log(`Fetching modules from ${listUrl.toString()} ...`)
 
-    const listResponse = await fetchJson<{collection?: {id: string; name: string}; modules: ModuleSummary[]}>(listUrl.toString())
+    const listResponse = await fetchJson<{collection?: CollectionSummary; modules: ModuleSummary[]}>(listUrl.toString())
+
+    if (!listResponse.collection?.cliName) {
+      this.error('The docs site did not return a CLI name for this collection. Please update hitman-api/hitman-ui, or set one in the collection settings.')
+    }
 
     if (!listResponse.modules || listResponse.modules.length === 0) {
       this.log('No published modules found.')
       return
     }
+
+    const {cliName} = listResponse.collection
 
     const selectedPaths = await checkbox({
       choices: listResponse.modules.map((module) => {
@@ -58,7 +73,7 @@ export default class Init extends Command {
           value: module.path,
         }
       }),
-      message: 'Select modules to install (space to toggle, enter to confirm)',
+      message: `Select modules to install for "${cliName}" (space to toggle, enter to confirm)`,
     })
 
     if (selectedPaths.length === 0) {
@@ -75,30 +90,39 @@ export default class Init extends Command {
       if (flags.collectionId) moduleUrl.searchParams.set('collectionId', flags.collectionId)
 
       this.log(`Fetching ${path} ...`)
+      // eslint-disable-next-line no-await-in-loop
       const moduleJson = await fetchJson<ModuleJson>(moduleUrl.toString())
 
-      await mkdir(configDir() + '/modules', {recursive: true})
-      await writeFile(modulePath(path), JSON.stringify(moduleJson, null, 2))
+      // eslint-disable-next-line no-await-in-loop
+      await mkdir(configDir() + `/modules/${cliName}`, {recursive: true})
+      // eslint-disable-next-line no-await-in-loop
+      await writeFile(modulePath(cliName, path), JSON.stringify(moduleJson, null, 2))
 
       for (const endpoint of moduleJson.endpoints) {
-        const filePath = await generateCommandFile(this.config.root, path, endpoint)
-        this.log(`  registered command: ${this.config.bin} ${path} ${endpoint.cli.command.name} -> ${filePath}`)
+        // eslint-disable-next-line no-await-in-loop
+        await generateCommandFile(this.config.root, cliName, path, endpoint)
+        this.log(`  registered command: ${this.config.bin} ${cliName} ${path} ${endpoint.cli.command.name}`)
       }
 
       selectedModules.push({name: moduleJson.module.name, path})
     }
 
-    const savedConfig: SavedConfig = {
+    const collectionConfig: CollectionConfig = {
       baseUrl,
-      collection: listResponse.collection ?? null,
+      cliName,
       collectionId: flags.collectionId ?? null,
       domain: args.domain,
       modules: selectedModules,
+      name: listResponse.collection.name,
       updatedAt: new Date().toISOString(),
     }
 
+    const savedConfig = await readSavedConfig()
+    const otherCollections = savedConfig.collections.filter((collection) => collection.cliName !== cliName)
+    savedConfig.collections = [...otherCollections, collectionConfig]
+
     await writeFile(configPath(), JSON.stringify(savedConfig, null, 2))
 
-    this.log(`\nInstalled ${selectedModules.length} module(s). Config saved to ${configPath()}`)
+    this.log(`\nInstalled ${selectedModules.length} module(s) for "${cliName}". Config saved to ${configPath()}`)
   }
 }

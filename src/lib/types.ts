@@ -32,11 +32,18 @@ export type ModuleSummary = {
   endpoints?: {name: string; path: string}[]
 }
 
-export type SavedConfig = {
-  baseUrl: string
+export type CollectionSummary = {id: string; name: string; cliName: string}
+
+export type CollectionConfig = {
+  cliName: string
+  name: string
   domain: string
+  baseUrl: string
   collectionId: string | null
-  collection: {id: string; name: string} | null
   modules: ModuleSummary[]
   updatedAt: string
+}
+
+export type SavedConfig = {
+  collections: CollectionConfig[]
 }

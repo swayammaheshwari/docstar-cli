@@ -12,8 +12,8 @@ const substitutePlaceholders = (template: string, params: Record<string, string>
     template,
   )
 
-export const loadModule = async (modulePathSegment: string): Promise<ModuleJson> => {
-  const raw = await readFile(modulePath(modulePathSegment), 'utf8')
+export const loadModule = async (cliName: string, modulePathSegment: string): Promise<ModuleJson> => {
+  const raw = await readFile(modulePath(cliName, modulePathSegment), 'utf8')
   return JSON.parse(raw) as ModuleJson
 }
 
@@ -30,14 +30,49 @@ const buildUrl = (endpoint: EndpointContract, params: Record<string, string>): s
 }
 
 const buildHeaders = (endpoint: EndpointContract, params: Record<string, string>): Record<string, string> => {
+  // Header names are case-insensitive; the docs editor can end up storing two entries that only
+  // differ by case (e.g. "Content-Type" and "content-type"). Sending both as separate header
+  // lines has been observed to break body parsing on the receiving server, so dedupe by
+  // lowercased name — first entry wins, using its original casing for readability.
+  const seenLowerNames = new Set<string>()
   const headers: Record<string, string> = {}
+
   for (const [rawKey, rawValue] of Object.entries(endpoint.headers || {})) {
     const key = stripHtml(rawKey)
+    const lowerKey = key.toLowerCase()
+    if (seenLowerNames.has(lowerKey)) continue
+    seenLowerNames.add(lowerKey)
+
     const value = stripHtml((rawValue as any)?.value ?? rawValue)
     headers[key] = params[key] ?? value
   }
 
   return headers
+}
+
+// CLI flag values always arrive as strings, but the JSON body template's existing value for a
+// key tells us its real type (boolean/number/array) — coerce back to that shape instead of
+// clobbering e.g. `getUrl: true` with the literal string "true", or `collectionIds: []` with a
+// plain string.
+const coerceToTemplateType = (existingValue: unknown, rawValue: string): unknown => {
+  if (typeof existingValue === 'boolean') return rawValue === 'true'
+  if (typeof existingValue === 'number') {
+    const parsedNumber = Number(rawValue)
+    return Number.isNaN(parsedNumber) ? rawValue : parsedNumber
+  }
+
+  if (Array.isArray(existingValue)) {
+    try {
+      const parsed = JSON.parse(rawValue)
+      if (Array.isArray(parsed)) return parsed
+    } catch {
+      // not a JSON array literal — fall through to comma-splitting
+    }
+
+    return rawValue.split(',').map((item) => item.trim())
+  }
+
+  return rawValue
 }
 
 const buildBody = (endpoint: EndpointContract, params: Record<string, string>): string | undefined => {
@@ -52,22 +87,23 @@ const buildBody = (endpoint: EndpointContract, params: Record<string, string>): 
   }
 
   for (const [key, value] of Object.entries(params)) {
-    if (key in parsed) parsed[key] = value
+    if (key in parsed) parsed[key] = coerceToTemplateType(parsed[key], value)
   }
 
   return JSON.stringify(parsed)
 }
 
 export const executeCliCommand = async (
+  cliName: string,
   modulePathSegment: string,
   commandName: string,
   params: Record<string, string>,
 ): Promise<{status: number; body: unknown}> => {
-  const moduleJson = await loadModule(modulePathSegment)
+  const moduleJson = await loadModule(cliName, modulePathSegment)
   const endpoint = findEndpoint(moduleJson, commandName)
 
   if (!endpoint) {
-    throw new Error(`No endpoint found for command "${commandName}" in module "${modulePathSegment}"`)
+    throw new Error(`No endpoint found for command "${commandName}" in module "${cliName} ${modulePathSegment}"`)
   }
 
   const url = buildUrl(endpoint, params)

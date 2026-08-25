@@ -6,7 +6,7 @@ const flagLine = (name: string, required: boolean): string =>
   // Required params are collected interactively when missing, so the flag itself stays optional to oclif.
   `    '${name}': Flags.string({description: '${required ? 'Required' : 'Optional'} parameter'}),`
 
-const commandFileContent = (modulePathSegment: string, endpoint: EndpointContract): string => {
+const commandFileContent = (cliName: string, modulePathSegment: string, endpoint: EndpointContract): string => {
   const {cli} = endpoint
   const flagLines = [
     ...cli.parameters.required.map((name) => flagLine(name, true)),
@@ -14,13 +14,13 @@ const commandFileContent = (modulePathSegment: string, endpoint: EndpointContrac
   ].join('\n')
 
   return `import {Command, Flags} from '@oclif/core'
-import {executeCliCommand} from '../../lib/http.js'
-import {promptForMissingParams} from '../../lib/prompt.js'
+import {executeCliCommand} from '../../../lib/http.js'
+import {promptForMissingParams} from '../../../lib/prompt.js'
 
 const REQUIRED_PARAMS = ${JSON.stringify(cli.parameters.required)}
 
 export default class Generated extends Command {
-  static description = ${JSON.stringify(cli.description || `${cli.name} (${modulePathSegment})`)}
+  static description = ${JSON.stringify(cli.description || `${cli.name} (${cliName} ${modulePathSegment})`)}
   static aliases = ${JSON.stringify(cli.command.aliases.filter((alias) => alias !== cli.name))}
   static flags = {
 ${flagLines}
@@ -36,7 +36,7 @@ ${flagLines}
     Object.assign(params, await promptForMissingParams(REQUIRED_PARAMS, params))
 
     try {
-      const result = await executeCliCommand('${modulePathSegment}', '${cli.command.name}', params)
+      const result = await executeCliCommand('${cliName}', '${modulePathSegment}', '${cli.command.name}', params)
       this.log(JSON.stringify(result, null, 2))
     } catch (error) {
       this.error(error.message)
@@ -46,10 +46,10 @@ ${flagLines}
 `
 }
 
-export const generateCommandFile = async (cliRoot: string, modulePathSegment: string, endpoint: EndpointContract): Promise<string> => {
-  const dir = join(cliRoot, 'dist', 'commands', modulePathSegment)
+export const generateCommandFile = async (cliRoot: string, cliName: string, modulePathSegment: string, endpoint: EndpointContract): Promise<string> => {
+  const dir = join(cliRoot, 'dist', 'commands', cliName, modulePathSegment)
   await mkdir(dir, {recursive: true})
   const filePath = join(dir, `${endpoint.cli.command.name}.js`)
-  await writeFile(filePath, commandFileContent(modulePathSegment, endpoint))
+  await writeFile(filePath, commandFileContent(cliName, modulePathSegment, endpoint))
   return filePath
 }

@@ -18,8 +18,8 @@ const buildInputShape = (required: string[], optional: string[]): Record<string,
 
 export default class Mcp extends Command {
   static override description = [
-    'Start an MCP (Model Context Protocol) server exposing every installed endpoint as a callable tool for AI clients (Claude Desktop, Claude Code, etc.).',
-    'Each endpoint becomes one tool named `<module>__<command>`, e.g. `slack__send-message-1`. Run `docstar-cli init <domain>` first so there is at least one installed module to expose.',
+    'Start an MCP (Model Context Protocol) server exposing every installed endpoint (across all installed collections) as a callable tool for AI clients (Claude Desktop, Claude Code, etc.).',
+    'Each endpoint becomes one tool named `<cli-name>__<module>__<command>`, e.g. `msg91__slack__send-message-1`. Run `docstar-cli init <domain>` first so there is at least one installed module to expose.',
     'This command does not exit on its own — it stays running and communicates over stdio for as long as the connecting AI client keeps the connection open.',
   ].join('\n')
   static override examples = [
@@ -40,26 +40,28 @@ export default class Mcp extends Command {
 
     let toolCount = 0
 
-    for (const module of savedConfig.modules) {
-      // eslint-disable-next-line no-await-in-loop
-      const moduleJson = await loadModule(module.path)
+    for (const collection of savedConfig.collections) {
+      for (const module of collection.modules) {
+        // eslint-disable-next-line no-await-in-loop
+        const moduleJson = await loadModule(collection.cliName, module.path)
 
-      for (const endpoint of moduleJson.endpoints) {
-        const {cli} = endpoint
-        const toolName = sanitize(`${module.path}__${cli.command.name}`)
-        const description = cli.description || `${cli.command.name} (${module.path})`
-        const inputShape = buildInputShape(cli.parameters.required, cli.parameters.optional)
+        for (const endpoint of moduleJson.endpoints) {
+          const {cli} = endpoint
+          const toolName = sanitize(`${collection.cliName}__${module.path}__${cli.command.name}`)
+          const description = cli.description || `${cli.command.name} (${collection.cliName} ${module.path})`
+          const inputShape = buildInputShape(cli.parameters.required, cli.parameters.optional)
 
-        server.tool(toolName, description, inputShape, async (args: Record<string, unknown>) => {
-          try {
-            const result = await executeCliCommand(module.path, cli.command.name, args as Record<string, string>)
-            return {content: [{type: 'text' as const, text: JSON.stringify(result)}]}
-          } catch (error) {
-            return {content: [{type: 'text' as const, text: (error as Error).message}], isError: true}
-          }
-        })
+          server.tool(toolName, description, inputShape, async (args: Record<string, unknown>) => {
+            try {
+              const result = await executeCliCommand(collection.cliName, module.path, cli.command.name, args as Record<string, string>)
+              return {content: [{type: 'text' as const, text: JSON.stringify(result)}]}
+            } catch (error) {
+              return {content: [{type: 'text' as const, text: (error as Error).message}], isError: true}
+            }
+          })
 
-        toolCount++
+          toolCount++
+        }
       }
     }
 
