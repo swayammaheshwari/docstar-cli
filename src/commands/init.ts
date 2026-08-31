@@ -64,17 +64,24 @@ export default class Init extends Command {
 
     const {cliName} = listResponse.collection
 
-    const selectedPaths = await checkbox({
-      choices: listResponse.modules.map((module) => {
-        const count = module.endpointCount ?? module.endpoints?.length ?? 0
-        return {
-          checked: true,
-          name: `${module.name} (${module.path}) — ${count} endpoint${count === 1 ? '' : 's'}`,
-          value: module.path,
-        }
-      }),
+    const SELECT_ALL = '__select_all__'
+
+    const rawSelection = await checkbox({
+      choices: [
+        ...listResponse.modules.map((module) => {
+          const count = module.endpointCount ?? module.endpoints?.length ?? 0
+          return {
+            checked: false,
+            name: `${module.name} (${module.path}) — ${count} endpoint${count === 1 ? '' : 's'}`,
+            value: module.path,
+          }
+        }),
+        {checked: false, name: '➤ Select all modules', value: SELECT_ALL},
+      ],
       message: `Select modules to install for "${cliName}" (space to toggle, enter to confirm)`,
     })
+
+    const selectedPaths = rawSelection.includes(SELECT_ALL) ? listResponse.modules.map((module) => module.path) : rawSelection
 
     if (selectedPaths.length === 0) {
       this.log('No modules selected, nothing installed.')

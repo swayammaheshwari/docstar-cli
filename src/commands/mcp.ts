@@ -19,7 +19,8 @@ const buildInputShape = (required: string[], optional: string[]): Record<string,
 export default class Mcp extends Command {
   static override description = [
     'Start an MCP (Model Context Protocol) server exposing every installed endpoint (across all installed collections) as a callable tool for AI clients (Claude Desktop, Claude Code, etc.).',
-    'Each endpoint becomes one tool named `<cli-name>__<module>__<command>`, e.g. `msg91__slack__send-message-1`. Run `docstar-cli init <domain>` first so there is at least one installed module to expose.',
+    'Every tool follows the collection -> module -> endpoint hierarchy: e.g. collection "msg91" -> module "slack" -> endpoint "send-message-1" becomes the tool `msg91__slack__send-message-1`.',
+    'Run `docstar-cli init <domain>` first so there is at least one installed module to expose.',
     'This command does not exit on its own — it stays running and communicates over stdio for as long as the connecting AI client keeps the connection open.',
   ].join('\n')
   static override examples = [
@@ -48,7 +49,7 @@ export default class Mcp extends Command {
         for (const endpoint of moduleJson.endpoints) {
           const {cli} = endpoint
           const toolName = sanitize(`${collection.cliName}__${module.path}__${cli.command.name}`)
-          const description = cli.description || `${cli.command.name} (${collection.cliName} ${module.path})`
+          const description = `[collection: ${collection.cliName} / module: ${module.path}] ${cli.description || cli.command.name}`
           const inputShape = buildInputShape(cli.parameters.required, cli.parameters.optional)
 
           server.tool(toolName, description, inputShape, async (args: Record<string, unknown>) => {
