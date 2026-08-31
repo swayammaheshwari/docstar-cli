@@ -4,7 +4,11 @@ import type {EndpointContract} from './types.js'
 
 const flagLine = (name: string, required: boolean): string =>
   // Required params are collected interactively when missing, so the flag itself stays optional to oclif.
-  `    '${name}': Flags.string({description: '${required ? 'Required' : 'Optional'} parameter'}),`
+  // Param names come from endpoint body/param keys authored in a rich-text editor and can contain
+  // quotes or HTML markup (e.g. a stray `<span text-block='true'>...`) — JSON.stringify escapes
+  // that safely for embedding in generated source; naive string interpolation does not and can
+  // produce invalid JS.
+  `    ${JSON.stringify(name)}: Flags.string({description: ${JSON.stringify(`${required ? 'Required' : 'Optional'} parameter`)}}),`
 
 const commandFileContent = (cliName: string, modulePathSegment: string, endpoint: EndpointContract): string => {
   const {cli} = endpoint
@@ -36,7 +40,7 @@ ${flagLines}
     Object.assign(params, await promptForMissingParams(REQUIRED_PARAMS, params))
 
     try {
-      const result = await executeCliCommand('${cliName}', '${modulePathSegment}', '${cli.command.name}', params)
+      const result = await executeCliCommand(${JSON.stringify(cliName)}, ${JSON.stringify(modulePathSegment)}, ${JSON.stringify(cli.command.name)}, params)
       this.log(JSON.stringify(result, null, 2))
     } catch (error) {
       this.error(error.message)
