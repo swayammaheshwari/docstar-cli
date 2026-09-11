@@ -42,6 +42,7 @@ export type CollectionConfig = {
   collectionId: string | null
   modules: ModuleSummary[]
   updatedAt: string
+  credentials?: Record<string, string>
 }
 
 export type SavedConfig = {

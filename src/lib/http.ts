@@ -1,6 +1,6 @@
 import {readFile} from 'node:fs/promises'
-import {modulePath} from './paths.js'
-import type {EndpointContract, ModuleJson} from './types.js'
+import {configPath, modulePath} from './paths.js'
+import type {EndpointContract, ModuleJson, SavedConfig} from './types.js'
 
 // Endpoint fields come from a rich-text editor and may be wrapped in
 // `<span text-block="true">...</span>`-style markup; unwrap to the raw value.
@@ -15,6 +15,17 @@ const substitutePlaceholders = (template: string, params: Record<string, string>
 export const loadModule = async (cliName: string, modulePathSegment: string): Promise<ModuleJson> => {
   const raw = await readFile(modulePath(cliName, modulePathSegment), 'utf8')
   return JSON.parse(raw) as ModuleJson
+}
+
+// Lets a value like `authkey` be saved once (`docstar-cli config set <cliName> authkey <value>`)
+// instead of being passed on every command line; an explicit flag for the same name still wins.
+const loadCredentials = async (cliName: string): Promise<Record<string, string>> => {
+  try {
+    const savedConfig = JSON.parse(await readFile(configPath(), 'utf8')) as SavedConfig
+    return savedConfig.collections.find((collection) => collection.cliName === cliName)?.credentials || {}
+  } catch {
+    return {}
+  }
 }
 
 export const findEndpoint = (moduleJson: ModuleJson, commandName: string): EndpointContract | undefined =>
@@ -106,9 +117,12 @@ export const executeCliCommand = async (
     throw new Error(`No endpoint found for command "${commandName}" in module "${cliName} ${modulePathSegment}"`)
   }
 
-  const url = buildUrl(endpoint, params)
-  const headers = buildHeaders(endpoint, params)
-  const body = buildBody(endpoint, params)
+  const credentials = await loadCredentials(cliName)
+  const effectiveParams = {...credentials, ...params}
+
+  const url = buildUrl(endpoint, effectiveParams)
+  const headers = buildHeaders(endpoint, effectiveParams)
+  const body = buildBody(endpoint, effectiveParams)
 
   const response = await fetch(url, {
     body,

@@ -10,11 +10,22 @@ const flagLine = (name: string, required: boolean): string =>
   // produce invalid JS.
   `    ${JSON.stringify(name)}: Flags.string({description: ${JSON.stringify(`${required ? 'Required' : 'Optional'} parameter`)}}),`
 
+// Header names configured in the docs editor (e.g. `authkey`) aren't part of `cli.parameters`,
+// so without this they can never be overridden from the CLI and requests are stuck with
+// whatever placeholder/value is baked into the cached module JSON. Expose them as flags too,
+// skipping any name that's already a parameter flag (that flag's value already reaches
+// `buildHeaders` via `params[key]`) or isn't a valid flag name.
+const headerFlagNames = (endpoint: EndpointContract): string[] => {
+  const paramNames = new Set([...endpoint.cli.parameters.required, ...endpoint.cli.parameters.optional])
+  return Object.keys(endpoint.headers || {}).filter((name) => /^[A-Za-z][\w-]*$/.test(name) && !paramNames.has(name))
+}
+
 const commandFileContent = (cliName: string, modulePathSegment: string, endpoint: EndpointContract): string => {
   const {cli} = endpoint
   const flagLines = [
     ...cli.parameters.required.map((name) => flagLine(name, true)),
     ...cli.parameters.optional.map((name) => flagLine(name, false)),
+    ...headerFlagNames(endpoint).map((name) => `    ${JSON.stringify(name)}: Flags.string({description: 'Header value'}),`),
   ].join('\n')
 
   return `import {Command, Flags} from '@oclif/core'
