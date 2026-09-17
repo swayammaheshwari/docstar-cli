@@ -83,6 +83,15 @@ const coerceToTemplateType = (existingValue: unknown, rawValue: string): unknown
     return rawValue.split(',').map((item) => item.trim())
   }
 
+  if (existingValue !== null && typeof existingValue === 'object') {
+    try {
+      const parsed = JSON.parse(rawValue)
+      if (typeof parsed === 'object' && parsed !== null) return parsed
+    } catch {
+      // not a JSON object literal — fall through to the raw string
+    }
+  }
+
   return rawValue
 }
 
