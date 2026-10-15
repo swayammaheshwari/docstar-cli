@@ -1,12 +1,12 @@
 # docstar-cli
 
-A CLI for calling published DocStar API endpoints directly from your terminal, without leaving the shell to read docs. Point it at a DocStar docs site, pick which modules (e.g. "Slack") you want, and it turns each published endpoint into a real command you can run. You can install from multiple docs sites/collections at once — each is kept separate under its own **CLI name**.
+A CLI for calling published DocStar API endpoints directly from your terminal, without leaving the shell to read docs. Point it at a DocStar docs site, pick which modules (e.g. "Slack") you want, and it turns each published endpoint into a real command you can run. You can install from multiple docs sites/collections at once — each is kept separate under its own **slug**.
 
 ## Concepts: collection → module → endpoint
 
 Every command follows a fixed three-level hierarchy:
 
-1. **Collection** — a docs site, identified by its **CLI name** (e.g. `msg91`). This is what `docstar-cli init` installs.
+1. **Collection** — a docs site, identified by its **slug** (e.g. `msg91`). This is what `docstar-cli init` installs.
 2. **Module** — a top-level section within that collection (e.g. `slack`).
 3. **Endpoint** — one published API within a module, turned into a command (e.g. `send-message-1`).
 
@@ -38,10 +38,10 @@ docstar-cli init localhost:3000 --collectionId paM4R4A26Hvb
 
 This fetches the list of published modules for that collection and shows an interactive checklist (nothing checked by default — press `space` to toggle a module, or select the **"Select all modules"** entry at the bottom of the list to install everything, then `enter` to confirm). For each selected module it:
 
-- saves its full endpoint contract to `~/.docstar/modules/<cli-name>/<module>.json`
-- registers a real CLI command for every endpoint: `docstar-cli <cli-name> <module> <command>`
+- saves its full endpoint contract to `~/.docstar/modules/<slug>/<module>.json`
+- registers a real CLI command for every endpoint: `docstar-cli <slug> <module> <command>`
 
-The **CLI name** comes from the collection's settings (set it under the collection's Domain settings in the docs editor — lowercase letters, numbers, `-` and `_` only; auto-generated from the collection name if not set yet). Running `init` against a different domain/collection adds it alongside any others already installed — nothing gets overwritten.
+The **slug** is chosen when the collection is created in DocStar (lowercase letters, numbers, `-` and `_` only) and never changes afterwards; the same slug identifies the collection for MCP. Running `init` against a different domain/collection adds it alongside any others already installed — nothing gets overwritten.
 
 Everything is saved to `~/.docstar/config.json`, grouped by collection.
 
@@ -128,9 +128,9 @@ there's at least one installed module for `mcp` to expose.
 
 ## How it works
 
-- `docstar-cli init` talks to `GET /p/module.json?collectionId=...` (the collection's name, CLI name, and list of modules) and `GET /p/<module>/module.json?collectionId=...` (a module's endpoint contract) on the docs site.
+- `docstar-cli init` talks to `GET /p/module.json?collectionId=...` (the collection's name, slug, and list of modules) and `GET /p/<module>/module.json?collectionId=...` (a module's endpoint contract) on the docs site.
 - Each endpoint's contract (method, url, base url, headers, body, and CLI parameter names) is saved locally and used to build the real HTTP request when you run its command — no network round-trip to the docs site is needed to run a command once a module is installed.
-- Commands are generated as real files on disk under this repo's `dist/commands/<cli-name>/<module>/`, which is why `npm run build` (it wipes `dist/`) requires re-running `docstar-cli init` for each installed collection afterwards to reinstall your modules.
+- Commands are generated as real files on disk under this repo's `dist/commands/<slug>/<module>/`, which is why `npm run build` (it wipes `dist/`) requires re-running `docstar-cli init` for each installed collection afterwards to reinstall your modules.
 
 ## Development
 

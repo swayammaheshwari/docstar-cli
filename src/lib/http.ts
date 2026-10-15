@@ -1,4 +1,5 @@
 import {readFile} from 'node:fs/promises'
+import {parseSavedConfig} from './config.js'
 import {configPath, modulePath} from './paths.js'
 import type {EndpointContract, ModuleJson, SavedConfig} from './types.js'
 
@@ -12,17 +13,17 @@ const substitutePlaceholders = (template: string, params: Record<string, string>
     template,
   )
 
-export const loadModule = async (cliName: string, modulePathSegment: string): Promise<ModuleJson> => {
-  const raw = await readFile(modulePath(cliName, modulePathSegment), 'utf8')
+export const loadModule = async (slug: string, modulePathSegment: string): Promise<ModuleJson> => {
+  const raw = await readFile(modulePath(slug, modulePathSegment), 'utf8')
   return JSON.parse(raw) as ModuleJson
 }
 
-// Lets a value like `authkey` be saved once (`docstar-cli config set <cliName> authkey <value>`)
+// Lets a value like `authkey` be saved once (`docstar-cli config set <slug> authkey <value>`)
 // instead of being passed on every command line; an explicit flag for the same name still wins.
-const loadCredentials = async (cliName: string): Promise<Record<string, string>> => {
+const loadCredentials = async (slug: string): Promise<Record<string, string>> => {
   try {
-    const savedConfig = JSON.parse(await readFile(configPath(), 'utf8')) as SavedConfig
-    return savedConfig.collections.find((collection) => collection.cliName === cliName)?.credentials || {}
+    const savedConfig = parseSavedConfig(await readFile(configPath(), 'utf8'))
+    return savedConfig.collections.find((collection) => collection.slug === slug)?.credentials || {}
   } catch {
     return {}
   }
@@ -114,19 +115,19 @@ const buildBody = (endpoint: EndpointContract, params: Record<string, string>): 
 }
 
 export const executeCliCommand = async (
-  cliName: string,
+  slug: string,
   modulePathSegment: string,
   commandName: string,
   params: Record<string, string>,
 ): Promise<{status: number; body: unknown}> => {
-  const moduleJson = await loadModule(cliName, modulePathSegment)
+  const moduleJson = await loadModule(slug, modulePathSegment)
   const endpoint = findEndpoint(moduleJson, commandName)
 
   if (!endpoint) {
-    throw new Error(`No endpoint found for command "${commandName}" in module "${cliName} ${modulePathSegment}"`)
+    throw new Error(`No endpoint found for command "${commandName}" in module "${slug} ${modulePathSegment}"`)
   }
 
-  const credentials = await loadCredentials(cliName)
+  const credentials = await loadCredentials(slug)
   const effectiveParams = {...credentials, ...params}
 
   const url = buildUrl(endpoint, effectiveParams)

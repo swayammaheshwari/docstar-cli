@@ -32,10 +32,10 @@ export type ModuleSummary = {
   endpoints?: {name: string; path: string}[]
 }
 
-export type CollectionSummary = {id: string; name: string; cliName: string}
+export type CollectionSummary = {id: string; name: string; slug: string}
 
 export type CollectionConfig = {
-  cliName: string
+  slug: string
   name: string
   domain: string
   baseUrl: string

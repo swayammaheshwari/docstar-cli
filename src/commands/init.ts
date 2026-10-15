@@ -1,4 +1,5 @@
 import {checkbox} from '@inquirer/prompts'
+import {parseSavedConfig} from '../lib/config.js'
 import {Args, Command, Flags} from '@oclif/core'
 import {mkdir, readFile, writeFile} from 'node:fs/promises'
 import {generateCommandFile} from '../lib/codegen.js'
@@ -19,7 +20,7 @@ const fetchJson = async <T>(url: string): Promise<T> => {
 
 const readSavedConfig = async (): Promise<SavedConfig> => {
   try {
-    return JSON.parse(await readFile(configPath(), 'utf8')) as SavedConfig
+    return parseSavedConfig(await readFile(configPath(), 'utf8'))
   } catch {
     return {collections: []}
   }
@@ -31,7 +32,7 @@ export default class Init extends Command {
   }
   static override description = [
     'Discover published modules for a DocStar docs site, pick which ones to install, and register their CLI commands.',
-    'You can run this against multiple docs sites/collections — each is kept separate under its own CLI name (`docstar-cli <cli-name> <module> <command>`).',
+    'You can run this against multiple docs sites/collections — each is kept separate under its own slug (`docstar-cli <slug> <module> <command>`).',
     'After installing, run `docstar-cli list` to see what got installed.',
   ].join('\n')
   static override examples = [
@@ -53,8 +54,8 @@ export default class Init extends Command {
 
     const listResponse = await fetchJson<{collection?: CollectionSummary; modules: ModuleSummary[]}>(listUrl.toString())
 
-    if (!listResponse.collection?.cliName) {
-      this.error('The docs site did not return a CLI name for this collection. Please update hitman-api/hitman-ui, or set one in the collection settings.')
+    if (!listResponse.collection?.slug) {
+      this.error('The docs site did not return a slug for this collection. Please update hitman-api/hitman-ui.')
     }
 
     if (!listResponse.modules || listResponse.modules.length === 0) {
@@ -62,7 +63,7 @@ export default class Init extends Command {
       return
     }
 
-    const {cliName} = listResponse.collection
+    const {slug} = listResponse.collection
 
     const SELECT_ALL = '__select_all__'
 
@@ -78,7 +79,7 @@ export default class Init extends Command {
         }),
         {checked: false, name: '➤ Select all modules', value: SELECT_ALL},
       ],
-      message: `Select modules to install for "${cliName}" (space to toggle, enter to confirm)`,
+      message: `Select modules to install for "${slug}" (space to toggle, enter to confirm)`,
     })
 
     const selectedPaths = rawSelection.includes(SELECT_ALL) ? listResponse.modules.map((module) => module.path) : rawSelection
@@ -101,14 +102,14 @@ export default class Init extends Command {
       const moduleJson = await fetchJson<ModuleJson>(moduleUrl.toString())
 
       // eslint-disable-next-line no-await-in-loop
-      await mkdir(configDir() + `/modules/${cliName}`, {recursive: true})
+      await mkdir(configDir() + `/modules/${slug}`, {recursive: true})
       // eslint-disable-next-line no-await-in-loop
-      await writeFile(modulePath(cliName, path), JSON.stringify(moduleJson, null, 2))
+      await writeFile(modulePath(slug, path), JSON.stringify(moduleJson, null, 2))
 
       for (const endpoint of moduleJson.endpoints) {
         // eslint-disable-next-line no-await-in-loop
-        await generateCommandFile(this.config.root, cliName, path, endpoint)
-        this.log(`  registered command: ${this.config.bin} ${cliName} ${path} ${endpoint.cli.command.name}`)
+        await generateCommandFile(this.config.root, slug, path, endpoint)
+        this.log(`  registered command: ${this.config.bin} ${slug} ${path} ${endpoint.cli.command.name}`)
       }
 
       selectedModules.push({name: moduleJson.module.name, path})
@@ -116,7 +117,7 @@ export default class Init extends Command {
 
     const collectionConfig: CollectionConfig = {
       baseUrl,
-      cliName,
+      slug,
       collectionId: flags.collectionId ?? null,
       domain: args.domain,
       modules: selectedModules,
@@ -125,11 +126,11 @@ export default class Init extends Command {
     }
 
     const savedConfig = await readSavedConfig()
-    const otherCollections = savedConfig.collections.filter((collection) => collection.cliName !== cliName)
+    const otherCollections = savedConfig.collections.filter((collection) => collection.slug !== slug)
     savedConfig.collections = [...otherCollections, collectionConfig]
 
     await writeFile(configPath(), JSON.stringify(savedConfig, null, 2))
 
-    this.log(`\nInstalled ${selectedModules.length} module(s) for "${cliName}". Config saved to ${configPath()}`)
+    this.log(`\nInstalled ${selectedModules.length} module(s) for "${slug}". Config saved to ${configPath()}`)
   }
 }

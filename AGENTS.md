@@ -19,9 +19,9 @@ It talks to two sibling repos in this workspace:
 Every command follows a fixed three-level hierarchy, and this is the single most important thing
 to understand about this codebase:
 
-1. **Collection** — one DocStar docs site/collection, identified by a **CLI name** (e.g. `msg91`),
-   set in the collection's `docProperties.cliName` (backend-validated: lowercase letters, numbers,
-   `-`, `_` only). A user can install multiple collections side by side.
+1. **Collection** — one DocStar docs site/collection, identified by its **slug** (e.g. `msg91`),
+   stored in the collection's `slug` column (chosen at creation, never changes; lowercase letters,
+   numbers, `-`, `_` only). A user can install multiple collections side by side.
 2. **Module** — a top-level page/section within a collection (e.g. `slack`). Corresponds to a
    `type === 1` page in hitman-api.
 3. **Endpoint** — one published API within a module (e.g. `send-message-1`), becomes one real CLI
@@ -44,7 +44,7 @@ and the collection level is what disambiguates them.
   checklist (nothing checked by default; a "Select all modules" entry at the bottom selects
   everything), fetches each selected module's contract, saves it to
   `~/.docstar/modules/<collection>/<module>.json`, and generates a real command file per endpoint.
-  Merges into `~/.docstar/config.json` by collection CLI name — running `init` again for a
+  Merges into `~/.docstar/config.json` by collection slug — running `init` again for a
   different collection never wipes previously-installed ones.
 - `src/commands/list.ts` — `list` (all installed collections) / `list <collection>` (its modules)
   / `list <collection> <module>` (that module's endpoints). Purely reads what's already saved

@@ -1,11 +1,12 @@
 import {Args, Command} from '@oclif/core'
+import {parseSavedConfig} from '../../lib/config.js'
 import {readFile, writeFile} from 'node:fs/promises'
 import {configPath} from '../../lib/paths.js'
 import type {SavedConfig} from '../../lib/types.js'
 
 export default class ConfigSet extends Command {
   static override args = {
-    cliName: Args.string({description: 'Installed collection (CLI name), e.g. msg91', required: true}),
+    slug: Args.string({description: 'Installed collection (slug), e.g. msg91', required: true}),
     key: Args.string({description: 'Credential name, matching a header/param name, e.g. authkey', required: true}),
     value: Args.string({description: 'Value to store', required: true}),
   }
@@ -21,20 +22,20 @@ export default class ConfigSet extends Command {
 
     let savedConfig: SavedConfig
     try {
-      savedConfig = JSON.parse(await readFile(configPath(), 'utf8')) as SavedConfig
+      savedConfig = parseSavedConfig(await readFile(configPath(), 'utf8'))
     } catch {
       this.error('No installed modules found. Run `docstar-cli init <domain>` first.')
     }
 
-    const collection = savedConfig.collections.find((c) => c.cliName === args.cliName)
+    const collection = savedConfig.collections.find((c) => c.slug === args.slug)
     if (!collection) {
-      this.error(`Collection "${args.cliName}" isn't installed. Run \`docstar-cli list\` to see installed collections.`)
+      this.error(`Collection "${args.slug}" isn't installed. Run \`docstar-cli list\` to see installed collections.`)
     }
 
     collection.credentials = {...collection.credentials, [args.key]: args.value}
 
     await writeFile(configPath(), JSON.stringify(savedConfig, null, 2))
 
-    this.log(`Saved "${args.key}" for collection "${args.cliName}".`)
+    this.log(`Saved "${args.key}" for collection "${args.slug}".`)
   }
 }

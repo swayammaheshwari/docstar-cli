@@ -1,4 +1,5 @@
 import {checkbox, confirm} from '@inquirer/prompts'
+import {parseSavedConfig} from '../lib/config.js'
 import {Args, Command, Flags} from '@oclif/core'
 import {readFile, rm, writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
@@ -7,7 +8,7 @@ import type {SavedConfig} from '../lib/types.js'
 
 export default class Clean extends Command {
   static override args = {
-    collection: Args.string({description: 'The collection (CLI name) to clean up, e.g. msg91', required: true}),
+    collection: Args.string({description: 'The collection (slug) to clean up, e.g. msg91', required: true}),
   }
   static override description = [
     'Uninstall modules from a collection, or the entire collection.',
@@ -29,12 +30,12 @@ export default class Clean extends Command {
 
     let savedConfig: SavedConfig
     try {
-      savedConfig = JSON.parse(await readFile(configPath(), 'utf8')) as SavedConfig
+      savedConfig = parseSavedConfig(await readFile(configPath(), 'utf8'))
     } catch {
       this.error('No installed modules found. Run `docstar-cli init <domain>` first.')
     }
 
-    const collection = savedConfig.collections.find((c) => c.cliName === args.collection)
+    const collection = savedConfig.collections.find((c) => c.slug === args.collection)
     if (!collection) {
       this.error(`Collection "${args.collection}" isn't installed. Run \`docstar-cli list\` to see installed collections.`)
     }
@@ -43,7 +44,7 @@ export default class Clean extends Command {
       if (!flags.force) {
         const shouldDelete = await confirm({
           default: false,
-          message: `Delete the entire "${collection.cliName}" collection and all ${collection.modules.length} installed module(s)?`,
+          message: `Delete the entire "${collection.slug}" collection and all ${collection.modules.length} installed module(s)?`,
         })
 
         if (!shouldDelete) {
@@ -52,18 +53,18 @@ export default class Clean extends Command {
         }
       }
 
-      await rm(collectionModulesDir(collection.cliName), {force: true, recursive: true})
-      await rm(join(this.config.root, 'dist', 'commands', collection.cliName), {force: true, recursive: true})
+      await rm(collectionModulesDir(collection.slug), {force: true, recursive: true})
+      await rm(join(this.config.root, 'dist', 'commands', collection.slug), {force: true, recursive: true})
 
-      savedConfig.collections = savedConfig.collections.filter((c) => c.cliName !== collection.cliName)
+      savedConfig.collections = savedConfig.collections.filter((c) => c.slug !== collection.slug)
       await writeFile(configPath(), JSON.stringify(savedConfig, null, 2))
 
-      this.log(`Removed collection "${collection.cliName}" and its ${collection.modules.length} module(s).`)
+      this.log(`Removed collection "${collection.slug}" and its ${collection.modules.length} module(s).`)
       return
     }
 
     if (collection.modules.length === 0) {
-      this.log(`Collection "${collection.cliName}" has no installed modules.`)
+      this.log(`Collection "${collection.slug}" has no installed modules.`)
       return
     }
 
@@ -74,7 +75,7 @@ export default class Clean extends Command {
         ...collection.modules.map((module) => ({checked: false, name: `${module.name} (${module.path})`, value: module.path})),
         {checked: false, name: '➤ Select all modules', value: SELECT_ALL},
       ],
-      message: `Select modules to remove from "${collection.cliName}" (space to toggle, enter to confirm)`,
+      message: `Select modules to remove from "${collection.slug}" (space to toggle, enter to confirm)`,
     })
 
     const selectedPaths = rawSelection.includes(SELECT_ALL) ? collection.modules.map((module) => module.path) : rawSelection
@@ -86,22 +87,22 @@ export default class Clean extends Command {
 
     for (const path of selectedPaths) {
       // eslint-disable-next-line no-await-in-loop
-      await rm(modulePath(collection.cliName, path), {force: true})
+      await rm(modulePath(collection.slug, path), {force: true})
       // eslint-disable-next-line no-await-in-loop
-      await rm(join(this.config.root, 'dist', 'commands', collection.cliName, path), {force: true, recursive: true})
-      this.log(`  removed: ${collection.cliName} ${path}`)
+      await rm(join(this.config.root, 'dist', 'commands', collection.slug, path), {force: true, recursive: true})
+      this.log(`  removed: ${collection.slug} ${path}`)
     }
 
     collection.modules = collection.modules.filter((module) => !selectedPaths.includes(module.path))
 
     if (collection.modules.length === 0) {
-      await rm(collectionModulesDir(collection.cliName), {force: true, recursive: true})
-      savedConfig.collections = savedConfig.collections.filter((c) => c.cliName !== collection.cliName)
-      this.log(`Collection "${collection.cliName}" has no modules left, removed it entirely.`)
+      await rm(collectionModulesDir(collection.slug), {force: true, recursive: true})
+      savedConfig.collections = savedConfig.collections.filter((c) => c.slug !== collection.slug)
+      this.log(`Collection "${collection.slug}" has no modules left, removed it entirely.`)
     }
 
     await writeFile(configPath(), JSON.stringify(savedConfig, null, 2))
 
-    this.log(`Removed ${selectedPaths.length} module(s) from "${collection.cliName}".`)
+    this.log(`Removed ${selectedPaths.length} module(s) from "${collection.slug}".`)
   }
 }

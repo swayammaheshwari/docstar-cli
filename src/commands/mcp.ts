@@ -1,4 +1,5 @@
 import {Command} from '@oclif/core'
+import {parseSavedConfig} from '../lib/config.js'
 import {readFile} from 'node:fs/promises'
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js'
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js'
@@ -32,7 +33,7 @@ export default class Mcp extends Command {
   public async run(): Promise<void> {
     let savedConfig: SavedConfig
     try {
-      savedConfig = JSON.parse(await readFile(configPath(), 'utf8')) as SavedConfig
+      savedConfig = parseSavedConfig(await readFile(configPath(), 'utf8'))
     } catch {
       this.error('No installed modules found. Run `docstar-cli init <domain>` first.')
     }
@@ -44,17 +45,17 @@ export default class Mcp extends Command {
     for (const collection of savedConfig.collections) {
       for (const module of collection.modules) {
         // eslint-disable-next-line no-await-in-loop
-        const moduleJson = await loadModule(collection.cliName, module.path)
+        const moduleJson = await loadModule(collection.slug, module.path)
 
         for (const endpoint of moduleJson.endpoints) {
           const {cli} = endpoint
-          const toolName = sanitize(`${collection.cliName}__${module.path}__${cli.command.name}`)
-          const description = `[collection: ${collection.cliName} / module: ${module.path}] ${cli.description || cli.command.name}`
+          const toolName = sanitize(`${collection.slug}__${module.path}__${cli.command.name}`)
+          const description = `[collection: ${collection.slug} / module: ${module.path}] ${cli.description || cli.command.name}`
           const inputShape = buildInputShape(cli.parameters.required, cli.parameters.optional)
 
           server.tool(toolName, description, inputShape, async (args: Record<string, unknown>) => {
             try {
-              const result = await executeCliCommand(collection.cliName, module.path, cli.command.name, args as Record<string, string>)
+              const result = await executeCliCommand(collection.slug, module.path, cli.command.name, args as Record<string, string>)
               return {content: [{type: 'text' as const, text: JSON.stringify(result)}]}
             } catch (error) {
               return {content: [{type: 'text' as const, text: (error as Error).message}], isError: true}

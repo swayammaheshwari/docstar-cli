@@ -1,4 +1,5 @@
 import {Args, Command, Flags} from '@oclif/core'
+import {parseSavedConfig} from '../lib/config.js'
 import {readFile} from 'node:fs/promises'
 import {loadModule} from '../lib/http.js'
 import {configPath} from '../lib/paths.js'
@@ -6,7 +7,7 @@ import type {SavedConfig} from '../lib/types.js'
 
 export default class List extends Command {
   static override args = {
-    collection: Args.string({description: 'Show modules installed for this collection (CLI name), e.g. msg91', required: false}),
+    collection: Args.string({description: 'Show modules installed for this collection (slug), e.g. msg91', required: false}),
     module: Args.string({description: 'Show all endpoints for this module within the collection, e.g. slack', required: false}),
   }
   static override description = 'List installed collections, the modules within one, or every endpoint of one module'
@@ -25,7 +26,7 @@ export default class List extends Command {
 
     let savedConfig: SavedConfig
     try {
-      savedConfig = JSON.parse(await readFile(configPath(), 'utf8')) as SavedConfig
+      savedConfig = parseSavedConfig(await readFile(configPath(), 'utf8'))
     } catch {
       this.error('No installed modules found. Run `docstar-cli init <domain>` first.')
     }
@@ -37,13 +38,13 @@ export default class List extends Command {
 
     if (!args.collection) {
       for (const collection of savedConfig.collections) {
-        this.log(`${collection.name} (${collection.cliName}) — ${collection.domain} — ${collection.modules.length} module${collection.modules.length === 1 ? '' : 's'}`)
+        this.log(`${collection.name} (${collection.slug}) — ${collection.domain} — ${collection.modules.length} module${collection.modules.length === 1 ? '' : 's'}`)
       }
 
       return
     }
 
-    const collection = savedConfig.collections.find((c) => c.cliName === args.collection)
+    const collection = savedConfig.collections.find((c) => c.slug === args.collection)
     if (!collection) {
       this.error(`Collection "${args.collection}" isn't installed. Run \`docstar-cli list\` to see installed collections.`)
     }
@@ -51,7 +52,7 @@ export default class List extends Command {
     if (!args.module) {
       for (const module of collection.modules) {
         // eslint-disable-next-line no-await-in-loop
-        const moduleJson = await loadModule(collection.cliName, module.path)
+        const moduleJson = await loadModule(collection.slug, module.path)
         const count = moduleJson.endpoints.length
         this.log(`${module.name} (${module.path}) — ${count} endpoint${count === 1 ? '' : 's'}`)
       }
@@ -59,7 +60,7 @@ export default class List extends Command {
       return
     }
 
-    const moduleJson = await loadModule(collection.cliName, args.module)
+    const moduleJson = await loadModule(collection.slug, args.module)
 
     if (moduleJson.endpoints.length === 0) {
       this.log(`No endpoints found for module "${args.module}".`)

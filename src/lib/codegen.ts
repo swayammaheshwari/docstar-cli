@@ -20,7 +20,7 @@ const headerFlagNames = (endpoint: EndpointContract): string[] => {
   return Object.keys(endpoint.headers || {}).filter((name) => /^[A-Za-z][\w-]*$/.test(name) && !paramNames.has(name))
 }
 
-const commandFileContent = (cliName: string, modulePathSegment: string, endpoint: EndpointContract): string => {
+const commandFileContent = (slug: string, modulePathSegment: string, endpoint: EndpointContract): string => {
   const {cli} = endpoint
   const flagLines = [
     ...cli.parameters.required.map((name) => flagLine(name, true)),
@@ -35,7 +35,7 @@ import {promptForMissingParams} from '../../../lib/prompt.js'
 const REQUIRED_PARAMS = ${JSON.stringify(cli.parameters.required)}
 
 export default class Generated extends Command {
-  static description = ${JSON.stringify(cli.description || `${cli.name} (${cliName} ${modulePathSegment})`)}
+  static description = ${JSON.stringify(cli.description || `${cli.name} (${slug} ${modulePathSegment})`)}
   static aliases = ${JSON.stringify(cli.command.aliases.filter((alias) => alias !== cli.name))}
   static flags = {
 ${flagLines}
@@ -51,7 +51,7 @@ ${flagLines}
     Object.assign(params, await promptForMissingParams(REQUIRED_PARAMS, params))
 
     try {
-      const result = await executeCliCommand(${JSON.stringify(cliName)}, ${JSON.stringify(modulePathSegment)}, ${JSON.stringify(cli.command.name)}, params)
+      const result = await executeCliCommand(${JSON.stringify(slug)}, ${JSON.stringify(modulePathSegment)}, ${JSON.stringify(cli.command.name)}, params)
       this.log(JSON.stringify(result, null, 2))
     } catch (error) {
       this.error(error.message)
@@ -61,10 +61,10 @@ ${flagLines}
 `
 }
 
-export const generateCommandFile = async (cliRoot: string, cliName: string, modulePathSegment: string, endpoint: EndpointContract): Promise<string> => {
-  const dir = join(cliRoot, 'dist', 'commands', cliName, modulePathSegment)
+export const generateCommandFile = async (cliRoot: string, slug: string, modulePathSegment: string, endpoint: EndpointContract): Promise<string> => {
+  const dir = join(cliRoot, 'dist', 'commands', slug, modulePathSegment)
   await mkdir(dir, {recursive: true})
   const filePath = join(dir, `${endpoint.cli.command.name}.js`)
-  await writeFile(filePath, commandFileContent(cliName, modulePathSegment, endpoint))
+  await writeFile(filePath, commandFileContent(slug, modulePathSegment, endpoint))
   return filePath
 }
