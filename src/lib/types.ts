@@ -7,7 +7,11 @@ export type CliCommandMeta = {
 }
 
 export type EndpointContract = {
-  cli: CliCommandMeta
+  // Sent by older docs sites only; use cliOf(endpoint), which builds it when it's missing
+  cli?: CliCommandMeta
+  name?: string
+  path?: string
+  summary?: string
   method: string
   url: string
   baseUrl: string | null

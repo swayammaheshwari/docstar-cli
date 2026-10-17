@@ -2,6 +2,7 @@ import {checkbox} from '@inquirer/prompts'
 import {parseSavedConfig} from '../lib/config.js'
 import {Args, Command, Flags} from '@oclif/core'
 import {mkdir, readFile, writeFile} from 'node:fs/promises'
+import {cliOf} from '../lib/cli-meta.js'
 import {generateCommandFile} from '../lib/codegen.js'
 import {configDir, configPath, modulePath} from '../lib/paths.js'
 import type {CollectionConfig, CollectionSummary, ModuleJson, ModuleSummary, SavedConfig} from '../lib/types.js'
@@ -109,7 +110,7 @@ export default class Init extends Command {
       for (const endpoint of moduleJson.endpoints) {
         // eslint-disable-next-line no-await-in-loop
         await generateCommandFile(this.config.root, slug, path, endpoint)
-        this.log(`  registered command: ${this.config.bin} ${slug} ${path} ${endpoint.cli.command.name}`)
+        this.log(`  registered command: ${this.config.bin} ${slug} ${path} ${cliOf(endpoint).command.name}`)
       }
 
       selectedModules.push({name: moduleJson.module.name, path})

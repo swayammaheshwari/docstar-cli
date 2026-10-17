@@ -1,4 +1,5 @@
 import {readFile} from 'node:fs/promises'
+import {cliOf} from './cli-meta.js'
 import {parseSavedConfig} from './config.js'
 import {configPath, modulePath} from './paths.js'
 import type {EndpointContract, ModuleJson, SavedConfig} from './types.js'
@@ -9,7 +10,8 @@ export const stripHtml = (value: string | null | undefined): string => (value ??
 
 const substitutePlaceholders = (template: string, params: Record<string, string>): string =>
   Object.entries(params).reduce(
-    (result, [key, value]) => result.replaceAll(`:${key}`, value).replaceAll(`{${key}}`, value).replaceAll(`{{${key}}}`, value),
+    // `{{key}}` first: replacing `{key}` first would leave `{value}` behind inside `{{key}}`
+    (result, [key, value]) => result.replaceAll(`{{${key}}}`, value).replaceAll(`{${key}}`, value).replaceAll(`:${key}`, value),
     template,
   )
 
@@ -30,15 +32,40 @@ const loadCredentials = async (slug: string): Promise<Record<string, string>> =>
 }
 
 export const findEndpoint = (moduleJson: ModuleJson, commandName: string): EndpointContract | undefined =>
-  moduleJson.endpoints.find(
-    (endpoint) => endpoint.cli.command.name === commandName || endpoint.cli.command.aliases.includes(commandName),
-  )
+  moduleJson.endpoints.find((endpoint) => {
+    const {command} = cliOf(endpoint)
+    return command.name === commandName || command.aliases.includes(commandName)
+  })
+
+// The docs editor stores some characters as HTML entities, e.g. `&amp;` between query params
+const decodeEntities = (value: string): string =>
+  value
+    .replaceAll('&nbsp;', ' ')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#39;', "'")
+    .replaceAll('&lt;', '<')
+    .replaceAll('&gt;', '>')
+    .replaceAll('&amp;', '&')
 
 const buildUrl = (endpoint: EndpointContract, params: Record<string, string>): string => {
   const baseUrl = stripHtml(endpoint.baseUrl)
-  const path = substitutePlaceholders(stripHtml(endpoint.url), params)
-  if (/^https?:\/\//.test(path)) return path
-  return `${baseUrl}${path}`
+  const path = substitutePlaceholders(decodeEntities(stripHtml(endpoint.url)), params)
+  const fullUrl = /^https?:\/\//.test(path) ? path : `${baseUrl}${path}`
+
+  // A value given for one of the endpoint's query params (flag or saved value) replaces the example value
+  // the docs put in the url's query string, or is added to it
+  const queryNames = Object.entries(endpoint.params || {}).map(([name, entry]) => stripHtml(entry?.key || name).trim())
+  try {
+    const url = new URL(fullUrl)
+    for (const name of queryNames) {
+      if (name && params[name] !== undefined) url.searchParams.set(name, params[name])
+    }
+
+    return url.toString()
+  } catch {
+    // Not a complete url yet (e.g. `{{BASE_URL}}` was never set): send it as it is
+    return fullUrl
+  }
 }
 
 const buildHeaders = (endpoint: EndpointContract, params: Record<string, string>): Record<string, string> => {

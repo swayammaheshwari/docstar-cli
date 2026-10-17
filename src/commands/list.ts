@@ -1,6 +1,7 @@
 import {Args, Command, Flags} from '@oclif/core'
 import {parseSavedConfig} from '../lib/config.js'
 import {readFile} from 'node:fs/promises'
+import {cliOf} from '../lib/cli-meta.js'
 import {loadModule} from '../lib/http.js'
 import {configPath} from '../lib/paths.js'
 import type {SavedConfig} from '../lib/types.js'
@@ -68,7 +69,7 @@ export default class List extends Command {
     }
 
     for (const endpoint of moduleJson.endpoints) {
-      const {cli} = endpoint
+      const cli = cliOf(endpoint)
       const aliases = cli.command.aliases.filter((alias) => alias !== cli.command.name)
       this.log(`${cli.command.name}${aliases.length > 0 ? ` (aliases: ${aliases.join(', ')})` : ''}`)
       if (cli.description) this.log(`  ${cli.description}`)

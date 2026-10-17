@@ -4,6 +4,7 @@ import {readFile} from 'node:fs/promises'
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js'
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js'
 import {z} from 'zod'
+import {cliOf} from '../lib/cli-meta.js'
 import {executeCliCommand, loadModule} from '../lib/http.js'
 import {configPath} from '../lib/paths.js'
 import type {SavedConfig} from '../lib/types.js'
@@ -48,7 +49,7 @@ export default class Mcp extends Command {
         const moduleJson = await loadModule(collection.slug, module.path)
 
         for (const endpoint of moduleJson.endpoints) {
-          const {cli} = endpoint
+          const cli = cliOf(endpoint)
           const toolName = sanitize(`${collection.slug}__${module.path}__${cli.command.name}`)
           const description = `[collection: ${collection.slug} / module: ${module.path}] ${cli.description || cli.command.name}`
           const inputShape = buildInputShape(cli.parameters.required, cli.parameters.optional)

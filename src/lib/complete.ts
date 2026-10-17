@@ -1,4 +1,5 @@
 import {readFile} from 'node:fs/promises'
+import {cliOf} from './cli-meta.js'
 import {parseSavedConfig} from './config.js'
 import {loadModule} from './http.js'
 import {configPath} from './paths.js'
@@ -25,7 +26,7 @@ export const completeModules = async (slug: string): Promise<string[]> => {
 export const completeEndpoints = async (slug: string, modulePathSegment: string): Promise<string[]> => {
   try {
     const moduleJson = await loadModule(slug, modulePathSegment)
-    const names = moduleJson.endpoints.flatMap((endpoint) => [endpoint.cli.command.name, ...endpoint.cli.command.aliases])
+    const names = moduleJson.endpoints.flatMap((endpoint) => [cliOf(endpoint).command.name, ...cliOf(endpoint).command.aliases])
     return [...new Set(names)]
   } catch {
     return []

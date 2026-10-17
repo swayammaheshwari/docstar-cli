@@ -1,5 +1,6 @@
 import {mkdir, writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
+import {cliOf} from './cli-meta.js'
 import type {EndpointContract} from './types.js'
 
 const flagLine = (name: string, required: boolean): string =>
@@ -16,12 +17,13 @@ const flagLine = (name: string, required: boolean): string =>
 // skipping any name that's already a parameter flag (that flag's value already reaches
 // `buildHeaders` via `params[key]`) or isn't a valid flag name.
 const headerFlagNames = (endpoint: EndpointContract): string[] => {
-  const paramNames = new Set([...endpoint.cli.parameters.required, ...endpoint.cli.parameters.optional])
+  const {parameters} = cliOf(endpoint)
+  const paramNames = new Set([...parameters.required, ...parameters.optional])
   return Object.keys(endpoint.headers || {}).filter((name) => /^[A-Za-z][\w-]*$/.test(name) && !paramNames.has(name))
 }
 
 const commandFileContent = (slug: string, modulePathSegment: string, endpoint: EndpointContract): string => {
-  const {cli} = endpoint
+  const cli = cliOf(endpoint)
   const flagLines = [
     ...cli.parameters.required.map((name) => flagLine(name, true)),
     ...cli.parameters.optional.map((name) => flagLine(name, false)),
@@ -64,7 +66,7 @@ ${flagLines}
 export const generateCommandFile = async (cliRoot: string, slug: string, modulePathSegment: string, endpoint: EndpointContract): Promise<string> => {
   const dir = join(cliRoot, 'dist', 'commands', slug, modulePathSegment)
   await mkdir(dir, {recursive: true})
-  const filePath = join(dir, `${endpoint.cli.command.name}.js`)
+  const filePath = join(dir, `${cliOf(endpoint).command.name}.js`)
   await writeFile(filePath, commandFileContent(slug, modulePathSegment, endpoint))
   return filePath
 }
