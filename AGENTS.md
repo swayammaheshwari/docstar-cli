@@ -34,7 +34,10 @@ This shows up everywhere in the code:
 - MCP tool names: `<collection>__<module>__<endpoint>` (double underscore because MCP tool names
   can't contain spaces).
 
-Don't flatten this hierarchy or add a shortcut that skips the collection level — multiple
+Exception: **root endpoints** (endpoints at the collection root, outside every module) skip the
+module level: `docstar-cli <collection> <endpoint>`, tool `<collection>__<endpoint>`, commands under
+`dist/commands/<collection>/<endpoint>.js`, stored as the pseudo-module `__root__` (`ROOT_MODULE_PATH`
+in `src/lib/paths.ts`). Otherwise, don't flatten this hierarchy or add a shortcut that skips the collection level — multiple
 collections can have modules with the same name (e.g. two different sites both having "slack"),
 and the collection level is what disambiguates them.
 

@@ -3,7 +3,8 @@ import {parseSavedConfig} from '../lib/config.js'
 import {Args, Command, Flags} from '@oclif/core'
 import {readFile, rm, writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
-import {collectionModulesDir, configPath, modulePath} from '../lib/paths.js'
+import {loadModule} from '../lib/http.js'
+import {collectionModulesDir, configPath, isRootModule, modulePath} from '../lib/paths.js'
 import type {SavedConfig} from '../lib/types.js'
 
 export default class Clean extends Command {
@@ -87,9 +88,21 @@ export default class Clean extends Command {
 
     for (const path of selectedPaths) {
       // eslint-disable-next-line no-await-in-loop
-      await rm(modulePath(collection.slug, path), {force: true})
+      if (isRootModule(path)) {
+        // Root commands are individual files directly under the collection's commands dir.
+        // eslint-disable-next-line no-await-in-loop
+        const rootModule = await loadModule(collection.slug, path).catch(() => null)
+        for (const endpoint of rootModule?.endpoints || []) {
+          // eslint-disable-next-line no-await-in-loop
+          await rm(join(this.config.root, 'dist', 'commands', collection.slug, `${endpoint.cli.command.name}.js`), {force: true})
+        }
+      } else {
+        // eslint-disable-next-line no-await-in-loop
+        await rm(join(this.config.root, 'dist', 'commands', collection.slug, path), {force: true, recursive: true})
+      }
+
       // eslint-disable-next-line no-await-in-loop
-      await rm(join(this.config.root, 'dist', 'commands', collection.slug, path), {force: true, recursive: true})
+      await rm(modulePath(collection.slug, path), {force: true})
       this.log(`  removed: ${collection.slug} ${path}`)
     }
 

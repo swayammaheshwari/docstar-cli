@@ -1,7 +1,7 @@
 import {readFile} from 'node:fs/promises'
 import {parseSavedConfig} from './config.js'
 import {loadModule} from './http.js'
-import {configPath} from './paths.js'
+import {configPath, isRootModule} from './paths.js'
 import type {SavedConfig} from './types.js'
 
 const readSavedConfig = async (): Promise<SavedConfig> => {
@@ -19,7 +19,7 @@ const readSavedConfig = async (): Promise<SavedConfig> => {
 export const completeModules = async (slug: string): Promise<string[]> => {
   const savedConfig = await readSavedConfig()
   const collection = savedConfig.collections.find((c) => c.slug === slug)
-  return collection ? collection.modules.map((module) => module.path) : []
+  return collection ? collection.modules.map((module) => module.path).filter((path) => !isRootModule(path)) : []
 }
 
 export const completeEndpoints = async (slug: string, modulePathSegment: string): Promise<string[]> => {

@@ -2,7 +2,7 @@ import {Args, Command, Flags} from '@oclif/core'
 import {parseSavedConfig} from '../lib/config.js'
 import {readFile} from 'node:fs/promises'
 import {loadModule} from '../lib/http.js'
-import {configPath} from '../lib/paths.js'
+import {configPath, isRootModule} from '../lib/paths.js'
 import type {SavedConfig} from '../lib/types.js'
 
 export default class List extends Command {
@@ -54,7 +54,7 @@ export default class List extends Command {
         // eslint-disable-next-line no-await-in-loop
         const moduleJson = await loadModule(collection.slug, module.path)
         const count = moduleJson.endpoints.length
-        this.log(`${module.name} (${module.path}) — ${count} endpoint${count === 1 ? '' : 's'}`)
+        this.log(`${module.name} (${isRootModule(module.path) ? 'run as `<collection> <endpoint>`, list with `list <collection> __root__`' : module.path}) — ${count} endpoint${count === 1 ? '' : 's'}`)
       }
 
       return

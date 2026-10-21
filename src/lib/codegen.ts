@@ -1,5 +1,6 @@
 import {mkdir, writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
+import {isRootModule} from './paths.js'
 import type {EndpointContract} from './types.js'
 
 const flagLine = (name: string, required: boolean): string =>
@@ -28,14 +29,17 @@ const commandFileContent = (slug: string, modulePathSegment: string, endpoint: E
     ...headerFlagNames(endpoint).map((name) => `    ${JSON.stringify(name)}: Flags.string({description: 'Header value'}),`),
   ].join('\n')
 
+  // Root commands sit one directory higher (dist/commands/<slug>/<endpoint>.js) than module commands.
+  const libPath = isRootModule(modulePathSegment) ? '../../lib' : '../../../lib'
+
   return `import {Command, Flags} from '@oclif/core'
-import {executeCliCommand} from '../../../lib/http.js'
-import {promptForMissingParams} from '../../../lib/prompt.js'
+import {executeCliCommand} from '${libPath}/http.js'
+import {promptForMissingParams} from '${libPath}/prompt.js'
 
 const REQUIRED_PARAMS = ${JSON.stringify(cli.parameters.required)}
 
 export default class Generated extends Command {
-  static description = ${JSON.stringify(cli.description || `${cli.name} (${slug} ${modulePathSegment})`)}
+  static description = ${JSON.stringify(cli.description || `${cli.name} (${isRootModule(modulePathSegment) ? slug : `${slug} ${modulePathSegment}`})`)}
   static aliases = ${JSON.stringify(cli.command.aliases.filter((alias) => alias !== cli.name))}
   static flags = {
 ${flagLines}
@@ -62,7 +66,7 @@ ${flagLines}
 }
 
 export const generateCommandFile = async (cliRoot: string, slug: string, modulePathSegment: string, endpoint: EndpointContract): Promise<string> => {
-  const dir = join(cliRoot, 'dist', 'commands', slug, modulePathSegment)
+  const dir = isRootModule(modulePathSegment) ? join(cliRoot, 'dist', 'commands', slug) : join(cliRoot, 'dist', 'commands', slug, modulePathSegment)
   await mkdir(dir, {recursive: true})
   const filePath = join(dir, `${endpoint.cli.command.name}.js`)
   await writeFile(filePath, commandFileContent(slug, modulePathSegment, endpoint))

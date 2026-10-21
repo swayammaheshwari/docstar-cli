@@ -3,8 +3,8 @@ import {parseSavedConfig} from '../lib/config.js'
 import {Args, Command, Flags} from '@oclif/core'
 import {mkdir, readFile, writeFile} from 'node:fs/promises'
 import {generateCommandFile} from '../lib/codegen.js'
-import {configDir, configPath, modulePath} from '../lib/paths.js'
-import type {CollectionConfig, CollectionSummary, ModuleJson, ModuleSummary, SavedConfig} from '../lib/types.js'
+import {configDir, configPath, isRootModule, modulePath, ROOT_MODULE_PATH} from '../lib/paths.js'
+import type {CollectionConfig, CollectionSummary, ModuleJson, ModuleSummary, RootEndpointSummary, SavedConfig} from '../lib/types.js'
 
 const buildBaseUrl = (domain: string): string => {
   if (domain.startsWith('http://') || domain.startsWith('https://')) return domain.replace(/\/$/, '')
@@ -52,13 +52,16 @@ export default class Init extends Command {
 
     this.log(`Fetching modules from ${listUrl.toString()} ...`)
 
-    const listResponse = await fetchJson<{collection?: CollectionSummary; modules: ModuleSummary[]}>(listUrl.toString())
+    const listResponse = await fetchJson<{collection?: CollectionSummary; modules: ModuleSummary[]; rootEndpoints?: RootEndpointSummary[]}>(listUrl.toString())
 
     if (!listResponse.collection?.slug) {
       this.error('The docs site did not return a slug for this collection. Please update hitman-api/hitman-ui.')
     }
 
-    if (!listResponse.modules || listResponse.modules.length === 0) {
+    const modules = listResponse.modules || []
+    const rootEndpoints = listResponse.rootEndpoints || []
+
+    if (modules.length === 0 && rootEndpoints.length === 0) {
       this.log('No published modules found.')
       return
     }
@@ -69,7 +72,14 @@ export default class Init extends Command {
 
     const rawSelection = await checkbox({
       choices: [
-        ...listResponse.modules.map((module) => {
+        ...(rootEndpoints.length > 0
+          ? [{
+            checked: false,
+            name: `Root endpoints — ${rootEndpoints.length} endpoint${rootEndpoints.length === 1 ? '' : 's'} (${rootEndpoints.map((endpoint) => endpoint.path).join(', ')})`,
+            value: ROOT_MODULE_PATH,
+          }]
+          : []),
+        ...modules.map((module) => {
           const count = module.endpointCount ?? module.endpoints?.length ?? 0
           return {
             checked: false,
@@ -82,7 +92,7 @@ export default class Init extends Command {
       message: `Select modules to install for "${slug}" (space to toggle, enter to confirm)`,
     })
 
-    const selectedPaths = rawSelection.includes(SELECT_ALL) ? listResponse.modules.map((module) => module.path) : rawSelection
+    const selectedPaths = rawSelection.includes(SELECT_ALL) ? [...(rootEndpoints.length > 0 ? [ROOT_MODULE_PATH] : []), ...modules.map((module) => module.path)] : rawSelection
 
     if (selectedPaths.length === 0) {
       this.log('No modules selected, nothing installed.')
@@ -94,7 +104,8 @@ export default class Init extends Command {
     const selectedModules: ModuleSummary[] = []
 
     for (const path of selectedPaths) {
-      const moduleUrl = new URL(`/p/${path}/module.json`, baseUrl)
+      const moduleUrl = isRootModule(path) ? new URL('/p/module.json', baseUrl) : new URL(`/p/${path}/module.json`, baseUrl)
+      if (isRootModule(path)) moduleUrl.searchParams.set('scope', 'root')
       if (flags.collectionId) moduleUrl.searchParams.set('collectionId', flags.collectionId)
 
       this.log(`Fetching ${path} ...`)
@@ -107,12 +118,18 @@ export default class Init extends Command {
       await writeFile(modulePath(slug, path), JSON.stringify(moduleJson, null, 2))
 
       for (const endpoint of moduleJson.endpoints) {
+        // A root command `<slug> <endpoint>` would shadow a module's `<slug> <module>` topic of the same name.
+        if (isRootModule(path) && selectedPaths.includes(endpoint.cli.command.name)) {
+          this.warn(`Skipped root endpoint "${endpoint.cli.command.name}": a module with the same name is being installed.`)
+          continue
+        }
+
         // eslint-disable-next-line no-await-in-loop
         await generateCommandFile(this.config.root, slug, path, endpoint)
-        this.log(`  registered command: ${this.config.bin} ${slug} ${path} ${endpoint.cli.command.name}`)
+        this.log(`  registered command: ${this.config.bin} ${slug}${isRootModule(path) ? '' : ` ${path}`} ${endpoint.cli.command.name}`)
       }
 
-      selectedModules.push({name: moduleJson.module.name, path})
+      selectedModules.push({name: isRootModule(path) ? 'Root endpoints' : moduleJson.module.name, path})
     }
 
     const collectionConfig: CollectionConfig = {

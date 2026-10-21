@@ -32,6 +32,8 @@ export type ModuleSummary = {
   endpoints?: {name: string; path: string}[]
 }
 
+export type RootEndpointSummary = {name: string; path: string}
+
 export type CollectionSummary = {id: string; name: string; slug: string}
 
 export type CollectionConfig = {
