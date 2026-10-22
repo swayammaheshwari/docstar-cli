@@ -126,6 +126,22 @@ and send a message saying hi" resolves directly to that tool call — the AI cli
 required value it can't infer, exactly like any other MCP tool. Run `docstar-cli init` first so
 there's at least one installed module for `mcp` to expose.
 
+## Get an API key into your .env (`key pull`)
+
+When a DocStar MCP server creates an API key for you (its `get_<collection>_api_key` tool, after you
+sign in), it doesn't show the key: it gives your AI assistant a one-time command instead.
+
+```sh
+docstar-cli key pull ABCD-EFGH-JKLM            # writes the key to ./.env
+docstar-cli key pull ABCD-EFGH-JKLM --env .env.local
+```
+
+It picks the key up from DocStar (the code works once, for 5 minutes), sets the variable the docs
+owner chose (e.g. `ACME_API_KEY`) in the env file, keeping every other line, makes the file readable
+by you only and adds it to `.gitignore`. It prints only the key's last 4 characters, since AI
+assistants read the command's output. `--api` picks the DocStar API (default
+`https://api.docstar.io`).
+
 ## How it works
 
 - `docstar-cli init` talks to `GET /p/module.json?collectionId=...` (the collection's name, slug, and list of modules) and `GET /p/<module>/module.json?collectionId=...` (a module's endpoint contract) on the docs site.
