@@ -18,6 +18,37 @@ const fetchJson = async <T>(url: string): Promise<T> => {
   return (await response.json()) as T
 }
 
+// Docs are normally served at <base>/p/..., but a site hosted under a sub-path (e.g. giddh.com/api) serves them at <base>/...
+const candidateUrls = (baseUrl: string, path: string, params: Record<string, string | undefined> = {}): string[] =>
+  ['/p', ''].map((prefix) => {
+    const url = new URL(`${baseUrl}${prefix}${path}`)
+    for (const [key, value] of Object.entries(params)) {
+      if (value) url.searchParams.set(key, value)
+    }
+
+    return url.toString()
+  })
+
+const fetchFirstJson = async <T>(urls: string[]): Promise<{data: T; url: string}> => {
+  const failures: string[] = []
+  for (const url of urls) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      return {data: await fetchJson<T>(url), url}
+    } catch (error) {
+      failures.push(error instanceof Error ? error.message : String(error))
+    }
+  }
+
+  throw new Error(
+    [
+      'Could not find the DocStar docs. Tried:',
+      ...failures.map((failure) => `  ${failure}`),
+      'If the docs live under a sub-path, include it, e.g. docstar-cli init giddh.com/api',
+    ].join('\n'),
+  )
+}
+
 const readSavedConfig = async (): Promise<SavedConfig> => {
   try {
     return parseSavedConfig(await readFile(configPath(), 'utf8'))
@@ -37,6 +68,7 @@ export default class Init extends Command {
   ].join('\n')
   static override examples = [
     '<%= config.bin %> <%= command.id %> docs.msg91.com',
+    '<%= config.bin %> <%= command.id %> giddh.com/api',
     '<%= config.bin %> <%= command.id %> localhost:3000 --collectionId paM4R4A26Hvb',
   ]
   static override flags = {
@@ -47,12 +79,11 @@ export default class Init extends Command {
     const {args, flags} = await this.parse(Init)
 
     const baseUrl = buildBaseUrl(args.domain)
-    const listUrl = new URL('/p/module.json', baseUrl)
-    if (flags.collectionId) listUrl.searchParams.set('collectionId', flags.collectionId)
+    this.log(`Fetching modules from ${baseUrl} ...`)
 
-    this.log(`Fetching modules from ${listUrl.toString()} ...`)
-
-    const listResponse = await fetchJson<{collection?: CollectionSummary; modules: ModuleSummary[]; rootEndpoints?: RootEndpointSummary[]}>(listUrl.toString())
+    const {data: listResponse, url: listUrl} = await fetchFirstJson<{collection?: CollectionSummary; modules: ModuleSummary[]; rootEndpoints?: RootEndpointSummary[]}>(
+      candidateUrls(baseUrl, '/module.json', {collectionId: flags.collectionId}),
+    ).catch((error: Error) => this.error(error.message))
 
     if (!listResponse.collection?.slug) {
       this.error('The docs site did not return a slug for this collection. Please update hitman-api/hitman-ui.')
@@ -67,6 +98,8 @@ export default class Init extends Command {
     }
 
     const {slug} = listResponse.collection
+    // modules live under the same layout as the module list
+    const usesPrefix = new URL(listUrl).pathname.endsWith('/p/module.json')
 
     const SELECT_ALL = '__select_all__'
 
@@ -104,13 +137,15 @@ export default class Init extends Command {
     const selectedModules: ModuleSummary[] = []
 
     for (const path of selectedPaths) {
-      const moduleUrl = isRootModule(path) ? new URL('/p/module.json', baseUrl) : new URL(`/p/${path}/module.json`, baseUrl)
-      if (isRootModule(path)) moduleUrl.searchParams.set('scope', 'root')
-      if (flags.collectionId) moduleUrl.searchParams.set('collectionId', flags.collectionId)
-
       this.log(`Fetching ${path} ...`)
       // eslint-disable-next-line no-await-in-loop
-      const moduleJson = await fetchJson<ModuleJson>(moduleUrl.toString())
+      const {data: moduleJson} = await fetchFirstJson<ModuleJson>(
+        candidateUrls(
+          baseUrl,
+          isRootModule(path) ? '/module.json' : `/${path}/module.json`,
+          {collectionId: flags.collectionId, scope: isRootModule(path) ? 'root' : undefined},
+        ).filter((url) => new URL(url).pathname.includes('/p/') === usesPrefix),
+      ).catch((error: Error) => this.error(error.message))
 
       // eslint-disable-next-line no-await-in-loop
       await mkdir(configDir() + `/modules/${slug}`, {recursive: true})
