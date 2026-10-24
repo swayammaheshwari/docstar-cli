@@ -5,16 +5,17 @@ import {ensureGitignored, upsertEnvVar} from '../../lib/env-file.js'
 
 const ENV_VAR_PATTERN = /^[A-Z][A-Z0-9_]*$/
 
-// Picks up an API key that a DocStar MCP server created for the signed-in user (its API key tool returns this command
-// with a one-time code) and writes it to the project's .env. The key is never printed: AI assistants read this
-// command's output, and anything printed would end up in their context.
+// Picks up the API keys (and other values, such as a secret or a project id) that a DocStar MCP server created for the
+// signed-in user (its API key tool returns this command with a one-time code) and writes them to the project's .env.
+// The values are never printed: AI assistants read this command's output, and anything printed would end up in their
+// context.
 export default class KeyPull extends Command {
   static override args = {
     code: Args.string({description: 'One-time code from the MCP server, e.g. ABCD-EFGH-JKLM', required: true}),
   }
   static override description = [
-    'Write an API key created by a DocStar MCP server to your .env, using the one-time code its API key tool gave you.',
-    'The key is never shown: only its last 4 characters. The env file is added to .gitignore.',
+    'Write the API keys a DocStar MCP server created for you to your .env, using the one-time code its API key tool gave you.',
+    'The values are never shown: only their last 4 characters. The env file is added to .gitignore.',
   ].join('\n')
   static override examples = ['<%= config.bin %> <%= command.id %> ABCD-EFGH-JKLM', '<%= config.bin %> <%= command.id %> ABCD-EFGH-JKLM --env .env.local']
   static override flags = {
@@ -37,17 +38,23 @@ export default class KeyPull extends Command {
       this.error(`Couldn't reach ${api}: ${(error as Error).message}`)
     }
 
-    const body = (await response.json().catch(() => ({}))) as {envVar?: string; error?: string; key?: string}
+    const body = (await response.json().catch(() => ({}))) as {error?: string; vars?: Record<string, unknown>}
     if (!response.ok) this.error(body.error || `The key pickup failed (HTTP ${response.status})`)
-    const {envVar, key} = body
-    if (!envVar || !ENV_VAR_PATTERN.test(envVar) || typeof key !== 'string' || !key) {
+    const entries = Object.entries(body.vars || {})
+    if (entries.length === 0 || !entries.every(([name, value]) => ENV_VAR_PATTERN.test(name) && typeof value === 'string' && value)) {
       this.error('The key pickup answered with something unexpected')
     }
 
     const envFile = resolve(flags.env)
-    const replaced = await upsertEnvVar(envFile, envVar, key)
+    const written: string[] = []
+    for (const [name, value] of entries as Array<[string, string]>) {
+      // eslint-disable-next-line no-await-in-loop
+      const replaced = await upsertEnvVar(envFile, name, value)
+      written.push(`${name} (…${value.slice(-4)}${replaced ? ', replaced' : ''})`)
+    }
+
     const ignored = await ensureGitignored(envFile)
     const where = relative(process.cwd(), envFile) || envFile
-    this.log(`✓ ${envVar} ${replaced ? 'replaced' : 'written'} in ${where} (…${key.slice(-4)})${ignored ? `, and ${where} added to .gitignore` : ''}`)
+    this.log(`✓ ${written.join(', ')} written in ${where}${ignored ? `, and ${where} added to .gitignore` : ''}`)
   }
 }

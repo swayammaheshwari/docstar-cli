@@ -136,9 +136,10 @@ docstar-cli key pull ABCD-EFGH-JKLM            # writes the key to ./.env
 docstar-cli key pull ABCD-EFGH-JKLM --env .env.local
 ```
 
-It picks the key up from DocStar (the code works once, for 5 minutes), sets the variable the docs
-owner chose (e.g. `ACME_API_KEY`) in the env file, keeping every other line, makes the file readable
-by you only and adds it to `.gitignore`. It prints only the key's last 4 characters, since AI
+It picks the values up from DocStar (the code works once, for 5 minutes): one or more, such as an API
+key, a secret and a project id, under the variable names the docs owner chose (e.g. `ACME_API_KEY`,
+`ACME_API_SECRET`). It sets each in the env file, keeping every other line, makes the file readable by
+you only and adds it to `.gitignore`. It prints only each value's last 4 characters, since AI
 assistants read the command's output. `--api` picks the DocStar API (default
 `https://api.docstar.io`).
 
