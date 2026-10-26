@@ -28,17 +28,17 @@ export default class List extends Command {
     try {
       savedConfig = parseSavedConfig(await readFile(configPath(), 'utf8'))
     } catch {
-      this.error('No installed modules found. Run `docstar-cli init <domain>` first.')
+      this.error('No installed modules found. Run `docstar-cli init <slug>` first.')
     }
 
     if (savedConfig.collections.length === 0) {
-      this.log('No collections installed. Run `docstar-cli init <domain>` to install one.')
+      this.log('No collections installed. Run `docstar-cli init <slug>` to install one.')
       return
     }
 
     if (!args.collection) {
       for (const collection of savedConfig.collections) {
-        this.log(`${collection.name} (${collection.slug}) — ${collection.domain} — ${collection.modules.length} module${collection.modules.length === 1 ? '' : 's'}`)
+        this.log(`${collection.name} (${collection.slug}) — ${collection.api ?? collection.domain} — ${collection.modules.length} module${collection.modules.length === 1 ? '' : 's'}`)
       }
 
       return

@@ -4,15 +4,18 @@
 
 `docstar-cli` is a terminal tool (built on [oclif](https://oclif.io)) that turns a DocStar docs
 site's published API endpoints into real, runnable CLI commands and MCP tools. A user runs
-`docstar-cli init <domain>`, picks which modules they want, and gets a real command for every
+`docstar-cli init <slug>`, picks which modules they want, and gets a real command for every
 endpoint in those modules — no SDK, no hand-written request code.
 
 It talks to two sibling repos in this workspace:
 - **hitman-api** — the backend. Owns `GET /p/generate-module-json`, which returns either a
   collection's module list (no `path` query param) or one module's full endpoint contract
   (`path=<module>` given). See `hitman-api/.agent/rules/cli-rule.md` for that contract in detail.
+  `init` identifies the collection by `slug` (`?slug=<slug>`), against `https://api.docstar.io` unless
+  `--api` is given: there is no domain or collection id any more.
 - **hitman-ui** — thin proxy routes (`/p/module.json`, `/p/<module>/module.json`) in front of the
-  same backend endpoint. See `hitman-ui/.agent/rules/cli-rule.md`.
+  same backend endpoint, kept for CLI versions before 1.6.0; the CLI no longer uses them. See
+  `hitman-ui/.agent/rules/cli-rule.md`.
 
 ## The core concept: collection → module → endpoint
 
@@ -49,6 +52,12 @@ and the collection level is what disambiguates them.
   `~/.docstar/modules/<collection>/<module>.json`, and generates a real command file per endpoint.
   Merges into `~/.docstar/config.json` by collection slug — running `init` again for a
   different collection never wipes previously-installed ones.
+- `src/commands/key/request.ts`, `src/commands/key/save.ts`, `src/lib/key-crypto.ts` — getting a provider's API key into
+  the user's `.env` without it passing through the AI assistant or being stored anywhere. `key request` makes an X25519
+  keypair, keeps the private key in `~/.docstar/pending-keys/` (owner-only, 10 minutes) and prints the public key (which
+  is also the request id); the MCP tool encrypts the key with it and returns a payload; `key save --payload` decrypts it,
+  writes `.env`, adds it to `.gitignore`, deletes the private key and prints only the last 4 characters. These commands
+  never print the key. Format and a reference encrypt function: `docs/key-handoff.md`.
 - `src/commands/list.ts` — `list` (all installed collections) / `list <collection>` (its modules)
   / `list <collection> <module>` (that module's endpoints). Purely reads what's already saved
   locally, no network call.

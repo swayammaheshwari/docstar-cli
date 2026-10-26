@@ -39,9 +39,11 @@ export type CollectionSummary = {id: string; name: string; slug: string}
 export type CollectionConfig = {
   slug: string
   name: string
-  domain: string
-  baseUrl: string
-  collectionId: string | null
+  // The DocStar API the docs were read from. Collections installed by older versions have `domain`/`baseUrl`/`collectionId` instead.
+  api?: string
+  domain?: string
+  baseUrl?: string
+  collectionId?: string | null
   modules: ModuleSummary[]
   updatedAt: string
   credentials?: Record<string, string>

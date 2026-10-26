@@ -22,7 +22,7 @@ export default class ConfigGet extends Command {
     try {
       savedConfig = parseSavedConfig(await readFile(configPath(), 'utf8'))
     } catch {
-      this.error('No installed modules found. Run `docstar-cli init <domain>` first.')
+      this.error('No installed modules found. Run `docstar-cli init <slug>` first.')
     }
 
     const collection = savedConfig.collections.find((c) => c.slug === args.slug)
