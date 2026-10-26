@@ -52,12 +52,16 @@ and the collection level is what disambiguates them.
   `~/.docstar/modules/<collection>/<module>.json`, and generates a real command file per endpoint.
   Merges into `~/.docstar/config.json` by collection slug — running `init` again for a
   different collection never wipes previously-installed ones.
-- `src/commands/key/request.ts`, `src/commands/key/save.ts`, `src/lib/key-crypto.ts` — getting a provider's API key into
-  the user's `.env` without it passing through the AI assistant or being stored anywhere. `key request` makes an X25519
-  keypair, keeps the private key in `~/.docstar/pending-keys/` (owner-only, 10 minutes) and prints the public key (which
-  is also the request id); the MCP tool encrypts the key with it and returns a payload; `key save --payload` decrypts it,
-  writes `.env`, adds it to `.gitignore`, deletes the private key and prints only the last 4 characters. These commands
-  never print the key. Format and a reference encrypt function: `docs/key-handoff.md`.
+- `src/commands/key/request.ts`, `key/save.ts`, `key/emit.ts`, `src/lib/key-crypto.ts`, `src/lib/credentials.ts` — getting a
+  provider's API key to the user without it passing through the AI assistant or being stored on a server. `key request`
+  makes an X25519 keypair, keeps the private key in `~/.docstar/pending-keys/` (owner-only, 10 minutes) and prints the
+  public key (which is also the request id); the MCP tool encrypts the key with it and returns a payload; `key save`
+  decrypts it and stores the key under its collection in `~/.docstar/config.json` (`credentials` plus `credentialMeta`
+  with the env variable and header scheme; `sendableCredentials` puts the scheme in front when requests are made);
+  `key emit <slug> <name> --env` writes it to a project's env file. These commands never print the key (last 4
+  characters only; `config get` masks too, `--reveal` shows). Format and a reference encrypt function: `docs/key-handoff.md`.
+- `src/lib/slug.ts` — slug rules shared by `init`: `RESERVED_SLUGS` (the CLI's own command names) must match
+  hitman-api's `utils/slug.js`, which refuses them when a collection is created.
 - `src/commands/list.ts` — `list` (all installed collections) / `list <collection>` (its modules)
   / `list <collection> <module>` (that module's endpoints). Purely reads what's already saved
   locally, no network call.

@@ -47,7 +47,11 @@ export type CollectionConfig = {
   modules: ModuleSummary[]
   updatedAt: string
   credentials?: Record<string, string>
+  // What `key save` knew about a credential: the env variable `key emit` writes, and the scheme in front of it in the header (e.g. Bearer)
+  credentialMeta?: Record<string, CredentialMeta>
 }
+
+export type CredentialMeta = {envVar?: string; prefix?: string}
 
 export type SavedConfig = {
   collections: CollectionConfig[]

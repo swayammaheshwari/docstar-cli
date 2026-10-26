@@ -11,7 +11,9 @@ import {
 import {chmod, mkdir, readdir, readFile, rm, writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
 
+import {CREDENTIAL_NAME_PATTERN, PREFIX_PATTERN} from './credentials.js'
 import {configDir} from './paths.js'
+import {isReservedSlug, SLUG_PATTERN} from './slug.js'
 
 // How an API key gets from a provider's tool to the user's .env without the AI assistant ever reading it.
 //   1. `key request` makes an X25519 keypair here and keeps the private key on this machine.
@@ -28,7 +30,9 @@ const SPKI_PREFIX = Buffer.from('302a300506032b656e032100', 'hex')
 
 export const PENDING_KEY_TTL_MS = 10 * 60 * 1000
 
-export type KeyPayloadBody = {envVar: string; expiresAt: number; key: string}
+// What the tool encrypts: the key, where `key save` keeps it (collection slug and credential name), the variable `key emit`
+// writes it to, and the scheme in front of it in a header, if any. All inside the ciphertext, so the assistant can't change them.
+export type KeyPayloadBody = {envVar: string; expiresAt: number; key: string; name: string; prefix?: string; slug: string}
 
 type Payload = {ct: string; epk: string; iv: string; requestId: string; tag: string; v: number}
 type PendingKey = {expiresAt: number; privateKey: string}
@@ -157,9 +161,15 @@ export const decryptKeyPayload = async (encoded: string): Promise<{body: KeyPayl
     throw new Error('The payload expired. Ask the assistant to get the key again')
   }
 
-  if (!ENV_VAR_PATTERN.test(String(body.envVar)) || typeof body.key !== 'string' || !body.key) {
-    throw new Error('The payload has an unexpected content')
-  }
+  const valid =
+    ENV_VAR_PATTERN.test(String(body.envVar)) &&
+    typeof body.key === 'string' &&
+    body.key.length > 0 &&
+    SLUG_PATTERN.test(String(body.slug)) &&
+    !isReservedSlug(body.slug) &&
+    CREDENTIAL_NAME_PATTERN.test(String(body.name)) &&
+    (body.prefix === undefined || PREFIX_PATTERN.test(String(body.prefix)))
+  if (!valid) throw new Error('The payload has an unexpected content')
 
   return {body, forget}
 }

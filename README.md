@@ -126,27 +126,32 @@ and send a message saying hi" resolves directly to that tool call — the AI cli
 required value it can't infer, exactly like any other MCP tool. Run `docstar-cli init` first so
 there's at least one installed module for `mcp` to expose.
 
-## Get an API key into your .env (`key request`, `key save`)
+## Get an API key (`key request`, `key save`, `key emit`)
 
 When a DocStar MCP tool creates an API key for you (for example a provider's "create API key" tool), the
 key is never shown to your AI assistant and is not stored by DocStar. It is encrypted for your machine
-only, in two steps the assistant runs for you:
+only, in steps the assistant runs for you:
 
 ```sh
 docstar-cli key request
 # publicKey: pQUHZSURAptUbfObb9oi9qKKqycauP66Kw5phOBJUlE
 
 # the assistant gives the publicKey to the MCP tool, which gets the key from the provider,
-# encrypts it with the publicKey and returns this command:
-docstar-cli key save --payload <encrypted key>             # writes the key to ./.env
-docstar-cli key save --payload <encrypted key> --env .env.local
+# encrypts it with the publicKey and returns these two commands:
+docstar-cli key save --payload <encrypted key>        # stores the key in docstar-cli, under its collection
+docstar-cli key emit msg91 authkey --env .env         # writes it to this project's .env
+docstar-cli key emit msg91 authkey --env .env.local --var MSG91_KEY
 ```
 
 `key request` makes a keypair and keeps the private key in `~/.docstar/pending-keys/` (readable by you
-only, valid for 10 minutes). `key save` opens the payload with it, sets the variable the provider chose
-(e.g. `MSG91_AUTH_KEY`) in the env file, keeping every other line, makes the file readable by you only
-and adds it to `.gitignore`. The private key is deleted afterwards, so a payload works once. Only the
-key's last 4 characters are printed, since AI assistants read the command's output.
+only, valid for 10 minutes). `key save` opens the payload with it and stores the key in
+`~/.docstar/config.json` (readable by you only) under the collection, which must be installed with `init`;
+that collection's commands then send the key themselves, with its scheme in front where the provider
+chose one (`Authorization: Bearer <key>`). The private key is deleted afterwards, so a payload works once.
+`key emit` writes the stored key to a project's env file as the variable the provider chose, keeping every
+other line, makes the file readable by you only and adds it to `.gitignore`. These commands print only the
+key's last 4 characters, since AI assistants read their output; `config get` does the same unless you pass
+`--reveal`. Tool authors: the format is in [docs/key-handoff.md](docs/key-handoff.md).
 
 ## How it works
 

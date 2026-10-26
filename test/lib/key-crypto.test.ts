@@ -5,7 +5,7 @@ import {join} from 'node:path'
 
 import {createKeyRequest, decryptKeyPayload, encryptKeyPayload, pendingKeysDir} from '../../src/lib/key-crypto.js'
 
-const body = () => ({envVar: 'MSG91_AUTH_KEY', expiresAt: Date.now() + 60_000, key: 'sk_live_abc123wxyz'})
+const body = () => ({envVar: 'MSG91_AUTH_KEY', expiresAt: Date.now() + 60_000, key: 'sk_live_abc123wxyz', name: 'authkey', slug: 'msg91'})
 
 describe('keyCrypto', () => {
   let home: string
@@ -105,6 +105,27 @@ describe('keyCrypto', () => {
       message = error.message
     })
     expect(message).to.include('unexpected content')
+  })
+
+  it('rejects a slug that is a docstar-cli command, or a bad credential name or prefix', async () => {
+    const changes = [{slug: 'init'}, {slug: 'Bad Slug'}, {name: 'bad name'}, {prefix: 'Bearer token'}]
+    const messages = await Promise.all(
+      changes.map(async (change) => {
+        const {publicKey} = await createKeyRequest()
+        return decryptKeyPayload(encryptKeyPayload(publicKey, {...body(), ...change})).then(
+          () => '',
+          (error: Error) => error.message,
+        )
+      }),
+    )
+    for (const message of messages) expect(message).to.include('unexpected content')
+  })
+
+  it('keeps the prefix and the credential name it was given', async () => {
+    const {publicKey} = await createKeyRequest()
+    const opened = await decryptKeyPayload(encryptKeyPayload(publicKey, {...body(), name: 'Authorization', prefix: 'Bearer'}))
+    expect(opened.body.name).to.equal('Authorization')
+    expect(opened.body.prefix).to.equal('Bearer')
   })
 
   it('does not accept a request id that points outside the folder', async () => {

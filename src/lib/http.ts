@@ -1,5 +1,6 @@
 import {readFile} from 'node:fs/promises'
 import {parseSavedConfig} from './config.js'
+import {sendableCredentials} from './credentials.js'
 import {configPath, modulePath} from './paths.js'
 import type {EndpointContract, ModuleJson, SavedConfig} from './types.js'
 
@@ -23,7 +24,7 @@ export const loadModule = async (slug: string, modulePathSegment: string): Promi
 const loadCredentials = async (slug: string): Promise<Record<string, string>> => {
   try {
     const savedConfig = parseSavedConfig(await readFile(configPath(), 'utf8'))
-    return savedConfig.collections.find((collection) => collection.slug === slug)?.credentials || {}
+    return sendableCredentials(savedConfig.collections.find((collection) => collection.slug === slug))
   } catch {
     return {}
   }

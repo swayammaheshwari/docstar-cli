@@ -3,10 +3,9 @@ import {DEFAULT_API, parseSavedConfig} from '../lib/config.js'
 import {Args, Command, Flags} from '@oclif/core'
 import {mkdir, readFile, writeFile} from 'node:fs/promises'
 import {generateCommandFile} from '../lib/codegen.js'
+import {isReservedSlug, SLUG_PATTERN} from '../lib/slug.js'
 import {configDir, configPath, isRootModule, modulePath, ROOT_MODULE_PATH} from '../lib/paths.js'
 import type {CollectionConfig, CollectionSummary, ModuleJson, ModuleSummary, RootEndpointSummary, SavedConfig} from '../lib/types.js'
-
-const SLUG_PATTERN = /^[a-z0-9_-]{1,50}$/
 
 // Both the module list and a module's contract come from one route, told apart by its query
 const contractUrl = (api: string, slug: string, query: Record<string, string> = {}): string => {
@@ -51,6 +50,8 @@ export default class Init extends Command {
     if (!SLUG_PATTERN.test(requestedSlug)) {
       this.error(`"${requestedSlug}" is not a collection slug. Use the slug of the docs (lowercase letters, numbers, - and _), e.g. \`${this.config.bin} init msg91\`, not its domain.`)
     }
+
+    if (isReservedSlug(requestedSlug)) this.error(`"${requestedSlug}" is the name of a docstar-cli command, so no collection can use it as a slug.`)
 
     const api = flags.api.replace(/\/$/, '')
     const listUrl = contractUrl(api, requestedSlug)
