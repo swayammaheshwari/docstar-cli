@@ -1,4 +1,5 @@
 import {readFile} from 'node:fs/promises'
+import {refreshSignIn, usableSignIn, withToken} from './auth.js'
 import {parseSavedConfig} from './config.js'
 import {configPath, modulePath} from './paths.js'
 import type {EndpointContract, ModuleJson, SavedConfig} from './types.js'
@@ -119,7 +120,7 @@ export const executeCliCommand = async (
   modulePathSegment: string,
   commandName: string,
   params: Record<string, string>,
-): Promise<{status: number; body: unknown}> => {
+): Promise<{body: unknown; hint?: string; status: number}> => {
   const moduleJson = await loadModule(slug, modulePathSegment)
   const endpoint = findEndpoint(moduleJson, commandName)
 
@@ -134,14 +135,32 @@ export const executeCliCommand = async (
   const headers = buildHeaders(endpoint, effectiveParams)
   const body = buildBody(endpoint, effectiveParams)
 
-  const response = await fetch(url, {
-    body,
-    headers,
-    method: endpoint.method,
-  })
+  // Signed in (`docstar-cli login <slug>`): the user's token goes in the endpoint's token header. An expired token is
+  // refreshed first; one the API still refuses (401) is refreshed once more and the call retried.
+  let signIn = await usableSignIn(slug)
+  const send = async () => {
+    const authorized = withToken(headers, endpoint.auth, signIn, Object.keys(effectiveParams))
+    return {response: await fetch(url, {body, headers: authorized.headers, method: endpoint.method}), sent: authorized.sent}
+  }
+
+  let {response, sent} = await send()
+  if (response.status === 401 && sent && signIn?.refreshToken) {
+    signIn = await refreshSignIn(slug, signIn)
+    ;({response, sent} = await send())
+  }
 
   const contentType = response.headers.get('content-type') || ''
   const responseBody = contentType.includes('application/json') ? await response.json() : await response.text()
+
+  // An API that refuses the call says why in its body; the hint says what to do about it
+  if (response.status === 401) {
+    const hint = signIn
+      ? sent
+        ? `Your sign-in to ${slug} was refused. Run \`docstar-cli login ${slug}\` to sign in again.`
+        : undefined
+      : `Not signed in. If ${slug} offers sign-in, run \`docstar-cli login ${slug}\`; otherwise save its API key with \`docstar-cli config set ${slug} <header> <key>\`.`
+    if (hint) return {body: responseBody, hint, status: response.status}
+  }
 
   return {body: responseBody, status: response.status}
 }

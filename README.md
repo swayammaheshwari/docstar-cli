@@ -126,6 +126,33 @@ and send a message saying hi" resolves directly to that tool call — the AI cli
 required value it can't infer, exactly like any other MCP tool. Run `docstar-cli init` first so
 there's at least one installed module for `mcp` to expose.
 
+## Sign in to an API (`login`)
+
+If the docs owner set up sign-in (OAuth) for their DocStar MCP server, you can sign in from the
+terminal and every command (and `mcp` tool) for that collection then calls the API as you:
+
+```sh
+docstar-cli login msg91          # opens the sign-in page in your browser, waits until you're done
+docstar-cli msg91 sms send-otp --mobile 9198xxxxxx   # sent with your access token
+docstar-cli auth status          # which collections you're signed in to
+docstar-cli logout msg91         # forget the sign-in on this computer
+```
+
+- DocStar's API does the OAuth exchange with the owner's client secret; the CLI only gets your
+  tokens and keeps them in `~/.docstar/credentials.json` (readable by you only). They're never
+  printed, so an AI assistant running the CLI never sees them.
+- The token goes in the endpoint's token header (module.json's `auth`), else
+  `Authorization: Bearer`. A value you pass for that header yourself (a flag or `config set`) wins.
+- Expiring tokens are refreshed automatically; a token the API refuses is refreshed once and the call
+  retried. If the refresh is refused, run `login` again.
+- AI assistants that run one command at a time: `login msg91 --no-wait` prints the link and exits;
+  after you've signed in, `login msg91 --continue` finishes. `--no-browser` only prints the link.
+- `--api <url>` (or `DOCSTAR_API_URL`) picks the DocStar API; by default it's the one the collection
+  was installed from (`init --api`), else `https://api.docstar.io`.
+
+For the docs owner: add `https://api.docstar.io/p/cli-auth/callback` as a redirect URI in the OAuth
+app used for MCP sign-in (DocStar lists it with the MCP callback URLs).
+
 ## Get an API key into your .env (`key request`, `key save`)
 
 When a DocStar MCP tool creates an API key for you (for example a provider's "create API key" tool), the

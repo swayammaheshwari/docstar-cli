@@ -16,9 +16,13 @@ export type EndpointContract = {
   pathVariables: Record<string, any>
   body: any
   authentication: Record<string, any>
+  // Where a signed-in user's token goes (`docstar-cli login`); null or missing when the docs don't say
+  auth?: TokenPlacement | null
   description: string
   sampleResponse: any
 }
+
+export type TokenPlacement = {tokenHeader: string; tokenPrefix: string}
 
 export type ModuleJson = {
   module: {id: string; name: string; version: string}

@@ -82,6 +82,13 @@ and the collection level is what disambiguates them.
   - Endpoint `url`/`headers` values may contain literal `<span text-block="true">...</span>`
     markup from the rich-text docs editor — `stripHtml` unwraps it. This is docstar-cli's job, not
     the backend's or the UI proxy's.
+- `src/lib/auth.ts` + `src/commands/login.ts`, `logout.ts`, `auth/status.ts` — OAuth sign-in
+  (`docstar-cli login <collection>`). hitman-api's `/p/cli-auth/*` routes are the OAuth client (they
+  hold the docs owner's client secret, from the MCP server's OAuth settings); the CLI gets only the
+  user's tokens, saved owner-only in `~/.docstar/credentials.json`. `executeCliCommand` adds the token
+  with `withToken` (endpoint `auth` placement, else the sign-in's header; a header the user passed
+  wins), refreshes an expiring token first and retries once on 401. Never print tokens: AI
+  assistants read this CLI's output.
 - `src/lib/prompt.ts` — `promptForMissingParams`: generated commands prompt interactively for any
   required parameter not passed as a flag, so `docstar-cli <collection> <module> <endpoint>` works
   even with zero flags.
