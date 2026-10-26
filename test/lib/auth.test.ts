@@ -46,17 +46,20 @@ const stubFetch = (answers: Array<{body: unknown; status: number}>): Call[] => {
 
 describe('auth', () => {
   const realFetch = globalThis.fetch
-  const realHome = process.env.HOME
+  // os.homedir() reads HOME on Linux and macOS, USERPROFILE on Windows
+  const realHome = {HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE}
   let home: string
 
   beforeEach(async () => {
     home = await mkdtemp(join(tmpdir(), 'docstar-auth-'))
     process.env.HOME = home
+    process.env.USERPROFILE = home
   })
 
   afterEach(async () => {
     globalThis.fetch = realFetch
-    process.env.HOME = realHome
+    process.env.HOME = realHome.HOME
+    process.env.USERPROFILE = realHome.USERPROFILE
     await rm(home, {force: true, recursive: true})
   })
 
@@ -85,7 +88,8 @@ describe('auth', () => {
 
   it('saves sign-ins readable by the owner only', async () => {
     await saveSignIn('acme', signIn())
-    expect((await stat(credentialsPath())).mode.toString(8).slice(-3)).to.equal('600')
+    // Windows has no owner-only file modes
+    if (process.platform !== 'win32') expect((await stat(credentialsPath())).mode.toString(8).slice(-3)).to.equal('600')
     expect((await getSignIn('acme'))?.accessToken).to.equal('AT-old')
   })
 
