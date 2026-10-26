@@ -8,9 +8,11 @@ import {ENV_VAR_PATTERN} from '../../lib/key-crypto.js'
 // Writes a key that `key save` stored to a project's env file. The key is never printed: AI assistants read this
 // command's output, and anything printed would end up in their context.
 export default class KeyEmit extends Command {
+  // Positional order is part of the command (`key emit <slug> <name>`), so these keys must not be sorted by the linter
   static override args = {
-    name: Args.string({description: 'Credential name, e.g. authkey', required: true}),
     slug: Args.string({description: 'Installed collection (slug), e.g. msg91', required: true}),
+    // eslint-disable-next-line perfectionist/sort-objects
+    name: Args.string({description: 'Credential name, e.g. authkey', required: true}),
   }
   static override description = [
     'Write an API key stored by `key save` to a project .env, as the variable the provider chose.',
