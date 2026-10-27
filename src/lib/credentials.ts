@@ -60,3 +60,67 @@ export const sendableCredentials = (collection: CollectionConfig | undefined): R
       return [name, prefix ? `${prefix} ${value}` : value]
     }),
   )
+
+// The collection's saved credentials as requests send them ({} when nothing is installed or saved)
+export const savedCredentialsOf = async (slug: string): Promise<Record<string, string>> => {
+  try {
+    const savedConfig = parseSavedConfig(await readFile(configPath(), 'utf8'))
+    return sendableCredentials(savedConfig.collections.find((collection) => collection.slug === slug))
+  } catch {
+    return {}
+  }
+}
+
+// A value by name; header names match in any case
+export const valueByName = (values: Record<string, string>, name: string, anyCase = true): string | undefined => {
+  if (values[name] !== undefined && values[name] !== '') return values[name]
+  if (!anyCase) return undefined
+  const key = Object.keys(values).find((candidate) => candidate.toLowerCase() === name.toLowerCase())
+  return key && values[key] !== '' ? values[key] : undefined
+}
+
+// Puts a value in a header (replacing the docs' row in any case)
+export const setHeader = (headers: Record<string, string>, name: string, value: string): Record<string, string> => {
+  const lower = name.toLowerCase()
+  return {...Object.fromEntries(Object.entries(headers).filter(([header]) => header.toLowerCase() !== lower)), [name]: value}
+}
+
+// Puts a value in a query param of the URL
+export const setQueryParam = (url: string, name: string, value: string): string => {
+  try {
+    const parsed = new URL(url)
+    parsed.searchParams.set(name, value)
+    return parsed.toString()
+  } catch {
+    return `${url}${url.includes('?') ? '&' : '?'}${encodeURIComponent(name)}=${encodeURIComponent(value)}`
+  }
+}
+
+// What's missing before a call can be made, written for a person at a terminal and for an AI assistant reading it
+export class MissingCredentialError extends Error {
+  constructor(
+    public readonly slug: string,
+    public readonly kind: 'apiKey' | 'signIn',
+    public readonly name: string,
+    public readonly expired = false,
+  ) {
+    super(missingMessage(slug, kind, name, expired))
+  }
+}
+
+const missingMessage = (slug: string, kind: 'apiKey' | 'signIn', name: string, expired: boolean): string => {
+  if (kind === 'signIn') {
+    return [
+      expired ? `Your sign-in to ${slug} has expired.` : `This call needs you to sign in to ${slug}.`,
+      `  Sign in, in your terminal:  docstar-cli login ${slug}`,
+      `  From an AI assistant:       docstar-cli login ${slug} --no-wait  (open the link, then: docstar-cli login ${slug} --continue)`,
+    ].join('\n')
+  }
+
+  return [
+    `This call needs your ${slug} API key (sent as "${name}"), and none is saved.`,
+    `  Save it once, in your own terminal:  docstar-cli config set ${slug} ${name} <your key>`,
+    `  Or pass it on this call:            --${name} <your key>`,
+    `  Never paste the key into an AI chat.`,
+  ].join('\n')
+}

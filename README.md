@@ -126,6 +126,48 @@ and send a message saying hi" resolves directly to that tool call — the AI cli
 required value it can't infer, exactly like any other MCP tool. Run `docstar-cli init` first so
 there's at least one installed module for `mcp` to expose.
 
+## Sign-in and API keys
+
+Each endpoint runs on **your sign-in** by default, or on an **API key** where the docs owner marked one.
+The CLI checks what a call needs **before** calling, and says how to fix anything missing:
+
+```sh
+docstar-cli auth status msg91      # what msg91 needs, and whether it's set up
+docstar-cli list msg91 otp         # each endpoint's "needs: …"
+```
+
+### Sign in (`login`)
+
+If the docs owner set up sign-in (OAuth) for their DocStar MCP server, sign in once:
+
+```sh
+docstar-cli login msg91            # opens the sign-in page in your browser, waits until you're done
+docstar-cli logout msg91           # forget the sign-in on this computer
+```
+
+- Every endpoint that sends the sign-in header (default `Authorization`) then gets your token, unless
+  that header is marked as an API key or you passed its value yourself.
+- Not signed in? In a terminal the CLI asks "Sign in now?" and runs `login`; run by an AI assistant or
+  CI, it stops with the command to run (exit code 4).
+- DocStar's API does the OAuth exchange with the owner's client secret; the CLI only gets your tokens and
+  keeps them in `~/.docstar/credentials.json` (readable by you only). They're refreshed automatically.
+- AI assistants that run one command at a time: `login msg91 --no-wait` prints the link and exits; after
+  you've signed in, `login msg91 --continue` finishes. `--no-browser` only prints the link.
+
+For the docs owner: add `https://api.docstar.io/p/cli-auth/callback` as a redirect URI in the OAuth app
+used for MCP sign-in (DocStar lists it with the MCP callback URLs).
+
+### API keys
+
+For a header or query param the docs owner marked as an API key, the CLI sends your key: a flag on the
+call (`--authkey <key>`), else the one saved with `config set` or `key save`. It never reads your
+environment or `.env`. Missing in a terminal, it asks for the key (hidden) and offers to save it.
+
+### Exit codes
+
+`0` success, `1` the API answered with an error (4xx/5xx) or the call failed, `4` an API key or sign-in
+is missing (the message says how to add it).
+
 ## Get an API key (`key request`, `key save`, `key emit`)
 
 When a DocStar MCP tool creates an API key for you (for example a provider's "create API key" tool), the

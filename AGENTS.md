@@ -52,6 +52,15 @@ and the collection level is what disambiguates them.
   `~/.docstar/modules/<collection>/<module>.json`, and generates a real command file per endpoint.
   Merges into `~/.docstar/config.json` by collection slug — running `init` again for a
   different collection never wipes previously-installed ones.
+- `src/lib/auth.ts`, `src/lib/run.ts`, `src/lib/http.ts` (`executeCliCommand`, `endpointNeeds`) + `src/commands/login.ts`,
+  `logout.ts`, `auth/status.ts` — how a call authenticates. **Sign-in is the default**: an endpoint that sends the
+  sign-in header (the sign-in's `tokenHeader`, default `Authorization`) gets the `login` token, unless that header is
+  marked as an API key or the user gave its value (flag, `config set`, `key save`). **API keys only where marked**:
+  a header/query row with `credential: "apiKey"` in module.json (marked by the docs owner; `apiKeyRowsOf`); the value is a
+  flag, else the saved credential. Both are checked BEFORE calling (`MissingCredentialError`);
+  `runEndpoint` asks in a TTY (hidden key, or runs `login`), else exits 4. hitman-api's `/p/cli-auth/*` holds the OAuth
+  client secret; tokens are owner-only in `~/.docstar/credentials.json`, refreshed, retried once on 401. Never read the
+  environment or `.env` for keys, and never print keys or tokens: AI assistants read this CLI's output.
 - `src/commands/key/request.ts`, `key/save.ts`, `key/emit.ts`, `src/lib/key-crypto.ts`, `src/lib/credentials.ts` — getting a
   provider's API key to the user without it passing through the AI assistant or being stored on a server. `key request`
   makes an X25519 keypair, keeps the private key in `~/.docstar/pending-keys/` (owner-only, 10 minutes) and prints the
