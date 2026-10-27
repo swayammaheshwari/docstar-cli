@@ -138,7 +138,7 @@ export const waitForSignIn = async (
       continue // a network blip: try again on the next tick
     }
 
-    if (answer.status === 202) continue
+    if (answer.status === 202 || answer.status >= 500) continue // still waiting, or a server blip: try again
     if (answer.status === 200) return answer.body as unknown as TokenAnswer
     if (answer.status === 429) {
       interval *= 2

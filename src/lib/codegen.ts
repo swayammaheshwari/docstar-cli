@@ -3,7 +3,7 @@ import {join} from 'node:path'
 
 import type {EndpointContract} from './types.js'
 
-import {endpointNeeds} from './http.js'
+import {apiKeyRowsOf, endpointNeeds} from './http.js'
 import {isRootModule} from './paths.js'
 
 const flagLine = (name: string, required: boolean): string =>
@@ -19,10 +19,12 @@ const flagLine = (name: string, required: boolean): string =>
 // whatever placeholder/value is baked into the cached module JSON. Expose them as flags too,
 // skipping any name that's already a parameter flag (that flag's value already reaches
 // `buildHeaders` via `params[key]`) or isn't a valid flag name.
+const API_KEY_FLAG_DESCRIPTION = 'Your API key (or save it with `config set`)'
+
 // A credential header's flag says what it is; the value is never shown in help
 const headerFlagDescription = (endpoint: EndpointContract, name: string): string => {
   const {apiKeys, signIn} = endpointNeeds(endpoint)
-  if (apiKeys.some((key) => key.toLowerCase() === name.toLowerCase())) return 'Your API key (or save it with `config set`)'
+  if (apiKeys.some((key) => key.toLowerCase() === name.toLowerCase())) return API_KEY_FLAG_DESCRIPTION
   if (signIn && name.toLowerCase() === 'authorization') return 'Sent from your sign-in (`docstar-cli login`); a value here replaces it'
   return 'Header value'
 }
@@ -30,6 +32,17 @@ const headerFlagDescription = (endpoint: EndpointContract, name: string): string
 const headerFlagNames = (endpoint: EndpointContract): string[] => {
   const paramNames = new Set([...endpoint.cli.parameters.optional, ...endpoint.cli.parameters.required])
   return Object.keys(endpoint.headers || {}).filter((name) => /^[A-Za-z][\w-]*$/.test(name) && !paramNames.has(name))
+}
+
+// An API key marked on a query param needn't be a documented parameter, yet `credentialNote` tells the user to pass it as
+// `--<name>`: give it a flag too (header keys already have one above)
+const queryKeyFlagNames = (endpoint: EndpointContract): string[] => {
+  const taken = new Set(
+    [...endpoint.cli.parameters.optional, ...endpoint.cli.parameters.required, ...headerFlagNames(endpoint)].map((name) => name.toLowerCase()),
+  )
+  return apiKeyRowsOf(endpoint)
+    .filter((row) => row.in === 'query' && /^[A-Za-z][\w-]*$/.test(row.name) && !taken.has(row.name.toLowerCase()))
+    .map((row) => row.name)
 }
 
 // What `--help` says the command needs to authenticate, so nobody has to guess
@@ -54,6 +67,7 @@ const commandFileContent = (slug: string, modulePathSegment: string, endpoint: E
     ...cli.parameters.required.map((name) => flagLine(name, true)),
     ...cli.parameters.optional.map((name) => flagLine(name, false)),
     ...headerFlagNames(endpoint).map((name) => `    ${JSON.stringify(name)}: Flags.string({description: ${JSON.stringify(headerFlagDescription(endpoint, name))}}),`),
+    ...queryKeyFlagNames(endpoint).map((name) => `    ${JSON.stringify(name)}: Flags.string({description: ${JSON.stringify(API_KEY_FLAG_DESCRIPTION)}}),`),
   ].join('\n')
 
   // Root commands sit one directory higher (dist/commands/<slug>/<endpoint>.js) than module commands.

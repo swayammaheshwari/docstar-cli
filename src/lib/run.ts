@@ -43,6 +43,12 @@ const askFor = async (command: Command, error: MissingCredentialError, params: R
   return true
 }
 
+type RunDeps = {
+  ask: typeof askFor
+  canAsk: () => boolean
+  execute: typeof executeCliCommand
+}
+
 // What every generated endpoint command runs: asks for missing required parameters, checks the credentials the
 // endpoint needs before calling, prints the API's answer, and exits 1 when the API answered with an error.
 export const runEndpoint = async (
@@ -50,22 +56,27 @@ export const runEndpoint = async (
   call: {command: string; module: string; slug: string},
   params: Record<string, string>,
   required: string[],
+  deps: RunDeps = {ask: askFor, canAsk, execute: executeCliCommand},
 ): Promise<void> => {
   Object.assign(params, await promptForMissingParams(required, params))
 
-  // Each missing credential is asked for once at most (a key and a sign-in = two rounds)
-  for (let round = 0; round < 3; round++) {
+  // Each missing credential is asked for once: an endpoint can need any number of API keys plus a sign-in, so there is
+  // no fixed number of rounds. Being asked for the same one twice means the answer didn't take, so it stops there.
+  const asked = new Set<string>()
+  for (;;) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      const result = await executeCliCommand(call.slug, call.module, call.command, params)
+      const result = await deps.execute(call.slug, call.module, call.command, params)
       command.log(JSON.stringify(result, null, 2))
       if (result.status >= 400) command.exit(EXIT_API_ERROR)
       return
     } catch (error) {
       if ((error as {oclif?: unknown}).oclif) throw error
       if (!(error instanceof MissingCredentialError)) command.error((error as Error).message, {exit: EXIT_API_ERROR})
+      const id = `${error.kind}:${error.name.toLowerCase()}`
       // eslint-disable-next-line no-await-in-loop
-      if (!canAsk() || !(await askFor(command, error, params))) command.error(error.message, {exit: EXIT_CREDENTIAL_MISSING})
+      if (asked.has(id) || !deps.canAsk() || !(await deps.ask(command, error, params))) command.error(error.message, {exit: EXIT_CREDENTIAL_MISSING})
+      asked.add(id)
     }
   }
 }

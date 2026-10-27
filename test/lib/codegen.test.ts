@@ -51,3 +51,17 @@ describe('generateCommandFile', () => {
     expect(signInContent).to.contain('Runs on your sign-in: docstar-cli login acme')
   })
 })
+
+describe('generateCommandFile: API key on a query param', () => {
+  it('gives the key its own flag, as the help text says', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'docstar-codegen-'))
+    try {
+      const withKey = {...endpoint, params: {apikey: {checked: true, credential: 'apiKey', value: ''}}} as unknown as EndpointContract
+      const content = await readFile(await generateCommandFile(root, 'acme', 'sms', withKey), 'utf8')
+      expect(content).to.contain('"apikey": Flags.string')
+      expect(content).to.contain('--apikey <key>')
+    } finally {
+      await rm(root, {force: true, recursive: true})
+    }
+  })
+})
