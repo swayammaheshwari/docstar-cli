@@ -1,12 +1,15 @@
-import {Command} from '@oclif/core'
-import {parseSavedConfig} from '../lib/config.js'
-import {readFile} from 'node:fs/promises'
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js'
 import {StdioServerTransport} from '@modelcontextprotocol/sdk/server/stdio.js'
+import {Command} from '@oclif/core'
+import {readFile} from 'node:fs/promises'
 import {z} from 'zod'
+
+import type {SavedConfig} from '../lib/types.js'
+
+import {credentialNote} from '../lib/codegen.js'
+import {parseSavedConfig} from '../lib/config.js'
 import {executeCliCommand, loadModule} from '../lib/http.js'
 import {configPath, isRootModule} from '../lib/paths.js'
-import type {SavedConfig} from '../lib/types.js'
 
 const sanitize = (value: string): string => value.replaceAll(/[^a-zA-Z0-9_-]/g, '_')
 
@@ -52,15 +55,16 @@ export default class Mcp extends Command {
           // Root endpoints have no module level: `<collection>__<endpoint>`.
           const isRoot = isRootModule(module.path)
           const toolName = sanitize(isRoot ? `${collection.slug}__${cli.command.name}` : `${collection.slug}__${module.path}__${cli.command.name}`)
-          const description = `[collection: ${collection.slug}${isRoot ? '' : ` / module: ${module.path}`}] ${cli.description || cli.command.name}`
+          const note = credentialNote(collection.slug, endpoint)
+          const description = `[collection: ${collection.slug}${isRoot ? '' : ` / module: ${module.path}`}] ${cli.description || cli.command.name}${note ? `\n${note}. The user sets it up in their own terminal; never ask them to paste a key or token into the chat.` : ''}`
           const inputShape = buildInputShape(cli.parameters.required, cli.parameters.optional)
 
           server.tool(toolName, description, inputShape, async (args: Record<string, unknown>) => {
             try {
               const result = await executeCliCommand(collection.slug, module.path, cli.command.name, args as Record<string, string>)
-              return {content: [{type: 'text' as const, text: JSON.stringify(result)}]}
+              return {content: [{text: JSON.stringify(result), type: 'text' as const}]}
             } catch (error) {
-              return {content: [{type: 'text' as const, text: (error as Error).message}], isError: true}
+              return {content: [{text: (error as Error).message, type: 'text' as const}], isError: true}
             }
           })
 

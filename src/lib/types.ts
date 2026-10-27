@@ -20,6 +20,12 @@ export type EndpointContract = {
   sampleResponse: any
 }
 
+// Where a signed-in user's token goes (from the sign-in: the owner's sign-in header, default Authorization: Bearer)
+export type TokenPlacement = {tokenHeader: string; tokenPrefix: string}
+
+// A header or query-param row the docs owner marked as an API key (`credential: "apiKey"` on the row in module.json)
+export type ApiKeyRow = {in: 'header' | 'query'; name: string}
+
 export type ModuleJson = {
   module: {id: string; name: string; version: string}
   endpoints: EndpointContract[]

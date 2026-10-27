@@ -3,6 +3,10 @@ import {join} from 'node:path'
 
 export const configDir = (): string => join(homedir(), '.docstar')
 export const configPath = (): string => join(configDir(), 'config.json')
+// Sign-ins (`docstar-cli login`): the user's tokens per collection, kept apart from config.json and readable by the owner only
+export const credentialsPath = (): string => join(configDir(), 'credentials.json')
+// Sign-ins started with `login --no-wait`, finished by `login --continue`
+export const pendingSignInsPath = (): string => join(configDir(), 'pending-sign-ins.json')
 export const modulesDir = (): string => join(configDir(), 'modules')
 export const collectionModulesDir = (slug: string): string => join(modulesDir(), slug)
 export const modulePath = (slug: string, modulePathSegment: string): string => join(collectionModulesDir(slug), `${modulePathSegment}.json`)

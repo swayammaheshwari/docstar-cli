@@ -1,7 +1,10 @@
 import {mkdir, writeFile} from 'node:fs/promises'
 import {join} from 'node:path'
-import {isRootModule} from './paths.js'
+
 import type {EndpointContract} from './types.js'
+
+import {endpointNeeds} from './http.js'
+import {isRootModule} from './paths.js'
 
 const flagLine = (name: string, required: boolean): string =>
   // Required params are collected interactively when missing, so the flag itself stays optional to oclif.
@@ -16,9 +19,33 @@ const flagLine = (name: string, required: boolean): string =>
 // whatever placeholder/value is baked into the cached module JSON. Expose them as flags too,
 // skipping any name that's already a parameter flag (that flag's value already reaches
 // `buildHeaders` via `params[key]`) or isn't a valid flag name.
+// A credential header's flag says what it is; the value is never shown in help
+const headerFlagDescription = (endpoint: EndpointContract, name: string): string => {
+  const {apiKeys, signIn} = endpointNeeds(endpoint)
+  if (apiKeys.some((key) => key.toLowerCase() === name.toLowerCase())) return 'Your API key (or save it with `config set`)'
+  if (signIn && name.toLowerCase() === 'authorization') return 'Sent from your sign-in (`docstar-cli login`); a value here replaces it'
+  return 'Header value'
+}
+
 const headerFlagNames = (endpoint: EndpointContract): string[] => {
-  const paramNames = new Set([...endpoint.cli.parameters.required, ...endpoint.cli.parameters.optional])
+  const paramNames = new Set([...endpoint.cli.parameters.optional, ...endpoint.cli.parameters.required])
   return Object.keys(endpoint.headers || {}).filter((name) => /^[A-Za-z][\w-]*$/.test(name) && !paramNames.has(name))
+}
+
+// What `--help` says the command needs to authenticate, so nobody has to guess
+export const credentialNote = (slug: string, endpoint: EndpointContract): string => {
+  const {apiKeys, signIn} = endpointNeeds(endpoint)
+  return [
+    ...apiKeys.map((name) => `Needs your ${slug} API key "${name}": --${name} <key>, or save it once with docstar-cli config set ${slug} ${name} <key>`),
+    ...(signIn ? [`Runs on your sign-in: docstar-cli login ${slug}`] : []),
+  ].join('\n')
+}
+
+const commandDescription = (slug: string, modulePathSegment: string, endpoint: EndpointContract): string => {
+  const {cli} = endpoint
+  const base = cli.description || `${cli.name} (${isRootModule(modulePathSegment) ? slug : `${slug} ${modulePathSegment}`})`
+  const note = credentialNote(slug, endpoint)
+  return note ? `${base}\n\n${note}` : base
 }
 
 const commandFileContent = (slug: string, modulePathSegment: string, endpoint: EndpointContract): string => {
@@ -26,20 +53,19 @@ const commandFileContent = (slug: string, modulePathSegment: string, endpoint: E
   const flagLines = [
     ...cli.parameters.required.map((name) => flagLine(name, true)),
     ...cli.parameters.optional.map((name) => flagLine(name, false)),
-    ...headerFlagNames(endpoint).map((name) => `    ${JSON.stringify(name)}: Flags.string({description: 'Header value'}),`),
+    ...headerFlagNames(endpoint).map((name) => `    ${JSON.stringify(name)}: Flags.string({description: ${JSON.stringify(headerFlagDescription(endpoint, name))}}),`),
   ].join('\n')
 
   // Root commands sit one directory higher (dist/commands/<slug>/<endpoint>.js) than module commands.
   const libPath = isRootModule(modulePathSegment) ? '../../lib' : '../../../lib'
 
   return `import {Command, Flags} from '@oclif/core'
-import {executeCliCommand} from '${libPath}/http.js'
-import {promptForMissingParams} from '${libPath}/prompt.js'
+import {runEndpoint} from '${libPath}/run.js'
 
 const REQUIRED_PARAMS = ${JSON.stringify(cli.parameters.required)}
 
 export default class Generated extends Command {
-  static description = ${JSON.stringify(cli.description || `${cli.name} (${isRootModule(modulePathSegment) ? slug : `${slug} ${modulePathSegment}`})`)}
+  static description = ${JSON.stringify(commandDescription(slug, modulePathSegment, endpoint))}
   static aliases = ${JSON.stringify(cli.command.aliases.filter((alias) => alias !== cli.name))}
   static flags = {
 ${flagLines}
@@ -52,14 +78,7 @@ ${flagLines}
       if (value !== undefined) params[key] = value
     }
 
-    Object.assign(params, await promptForMissingParams(REQUIRED_PARAMS, params))
-
-    try {
-      const result = await executeCliCommand(${JSON.stringify(slug)}, ${JSON.stringify(modulePathSegment)}, ${JSON.stringify(cli.command.name)}, params)
-      this.log(JSON.stringify(result, null, 2))
-    } catch (error) {
-      this.error(error.message)
-    }
+    await runEndpoint(this, {slug: ${JSON.stringify(slug)}, module: ${JSON.stringify(modulePathSegment)}, command: ${JSON.stringify(cli.command.name)}}, params, REQUIRED_PARAMS)
   }
 }
 `

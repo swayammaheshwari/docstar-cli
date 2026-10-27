@@ -1,9 +1,11 @@
 import {Args, Command, Flags} from '@oclif/core'
-import {parseSavedConfig} from '../lib/config.js'
 import {readFile} from 'node:fs/promises'
-import {loadModule} from '../lib/http.js'
-import {configPath, isRootModule} from '../lib/paths.js'
+
 import type {SavedConfig} from '../lib/types.js'
+
+import {parseSavedConfig} from '../lib/config.js'
+import {endpointNeeds, loadModule} from '../lib/http.js'
+import {configPath, isRootModule} from '../lib/paths.js'
 
 export default class List extends Command {
   static override args = {
@@ -75,6 +77,9 @@ export default class List extends Command {
       this.log(`  ${endpoint.method}`)
       if (cli.parameters.required.length > 0) this.log(`  required: ${cli.parameters.required.join(', ')}`)
       if (cli.parameters.optional.length > 0) this.log(`  optional: ${cli.parameters.optional.join(', ')}`)
+      const {apiKeys, signIn} = endpointNeeds(endpoint)
+      const needs = [...apiKeys.map((name) => `API key "${name}"`), ...(signIn ? ['sign-in (docstar-cli login)'] : [])]
+      if (needs.length > 0) this.log(`  needs: ${needs.join(', ')}`)
       this.log('')
     }
   }
