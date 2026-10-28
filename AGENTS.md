@@ -4,8 +4,9 @@
 
 `docstar-cli` is a terminal tool (built on [oclif](https://oclif.io)) that turns a DocStar docs
 site's published API endpoints into real, runnable CLI commands and MCP tools. A user runs
-`docstar-cli init <slug>`, picks which modules they want, and gets a real command for every
-endpoint in those modules — no SDK, no hand-written request code.
+`docstar-cli <slug> <module> <endpoint>` for any collection — **no `init` needed**: the contract is read
+live from the docs on every call (2.0): one request for that endpoint's `module.json` (level 3). `docstar-cli init <slug>` only *registers* chosen modules
+(shortcut command, completion, MCP tools) — no SDK, no hand-written request code.
 
 It talks to two sibling repos in this workspace:
 - **hitman-api** — the backend. Owns `GET /p/generate-module-json`, which returns either a
@@ -32,30 +33,50 @@ to understand about this codebase:
 
 This shows up everywhere in the code:
 - Shell command shape: `docstar-cli <collection> <module> <endpoint> [--flags]`.
-- On-disk layout: `~/.docstar/modules/<collection>/<module>.json`, generated commands under
-  `dist/commands/<collection>/<module>/<endpoint>.js`.
+- On-disk layout: only `~/.docstar/config.json` (registered modules + command names, saved keys) and
+  `credentials.json` (sign-ins). Contracts and generated command files no longer exist (1.x kept them in
+  `~/.docstar/modules/` and `dist/commands/`; `init`/`clean` remove those leftovers).
 - MCP tool names: `<collection>__<module>__<endpoint>` (double underscore because MCP tool names
   can't contain spaces).
 
 Exception: **root endpoints** (endpoints at the collection root, outside every module) skip the
-module level: `docstar-cli <collection> <endpoint>`, tool `<collection>__<endpoint>`, commands under
-`dist/commands/<collection>/<endpoint>.js`, stored as the pseudo-module `__root__` (`ROOT_MODULE_PATH`
+module level: `docstar-cli <collection> <endpoint>`, tool `<collection>__<endpoint>`, read with
+`scope=root` and registered as the pseudo-module `__root__` (`ROOT_MODULE_PATH`
 in `src/lib/paths.ts`). Otherwise, don't flatten this hierarchy or add a shortcut that skips the collection level — multiple
 collections can have modules with the same name (e.g. two different sites both having "slack"),
 and the collection level is what disambiguates them.
 
 ## Where things live
 
-- `src/commands/init.ts` — fetches a collection's module list, shows an interactive multi-select
-  checklist (nothing checked by default; a "Select all modules" entry at the bottom selects
-  everything), fetches each selected module's contract, saves it to
-  `~/.docstar/modules/<collection>/<module>.json`, and generates a real command file per endpoint.
-  Merges into `~/.docstar/config.json` by collection slug — running `init` again for a
-  different collection never wipes previously-installed ones.
+- `bin/run.js` + `src/lib/dynamic.ts` — the core of 2.0. Before oclif runs, a first word that isn't a flag, matches
+  `SLUG_PATTERN` and isn't a reserved slug is a collection: `runDynamic` reads its docs live and runs
+  `<slug> <module> <endpoint> [--flags]` (`<slug> <endpoint>` for root endpoints, `<slug> <module>` lists a module,
+  `<slug>` lists modules, `--help` prints an endpoint's flags). Flags are parsed with `util.parseArgs` from the
+  contract (`src/lib/endpoint-flags.ts`: `flagSpecsOf`, `credentialNote`, `endpointHelp`). It runs outside oclif, so
+  `runEndpoint` (`src/lib/run.ts`) talks through a small `RunIo` (`log`/`error`/`exit`/`login`) and ends with an
+  `ExitSignal`. A typo like `lst` surfaces as "No collection". Never add a hidden oclif command or a new reserved
+  slug for this.
+- `src/lib/contracts.ts` — the only place the docs are read from, never saved or cached. `module.json` is a tree of three
+  levels (hitman-api's `cli-rule.md` has the shapes): `fetchCollection` (modules), `fetchModuleIndex` (a module's / the root's
+  index: per endpoint `command`, `aliases`, `parameters`, `credentials`, `headers`, `path`, `link`; **no endpoint data**; used
+  by `list`, `init`, completion and `mcp` startup) and `fetchEndpoint(slug, module, command)` (`path=<module>/<command>`,
+  `path=<command>` for a root endpoint: that one endpoint's full contract plus `auth`). The server finds the endpoint by page
+  path or by the command name/alias typed, so a command run is **one request** with no index first. A 404 says collection vs
+  endpoint. API base: `$DOCSTAR_API_URL`, else the registered collection's `api`, else `DEFAULT_API`.
+- MCP and the CLI deliberately do **not** share an endpoint format: hosted MCP reads the llms.txt tree and `.openapi.yml`
+  files, the CLI reads `module.json`. Don't add CLI-only fields to the OpenAPI files, and don't make the CLI parse them.
+- `src/commands/init.ts` — **registration only**: fetches a collection's module list, shows an interactive
+  multi-select checklist (nothing checked by default; a "Select all modules" entry selects everything), reads
+  each selected module's index only for its command names, and stores `modules: [{name, path, commands}]` in
+  `~/.docstar/config.json` (merged by collection slug, keeping saved keys), plus the `<slug>` shortcut. Nothing is
+  downloaded or generated.
 - `src/lib/auth.ts`, `src/lib/run.ts`, `src/lib/http.ts` (`executeCliCommand`, `endpointNeeds`) + `src/commands/login.ts`,
-  `logout.ts`, `auth/status.ts` — how a call authenticates. **Sign-in is the default**: an endpoint that sends the
-  sign-in header (the sign-in's `tokenHeader`, default `Authorization`) gets the `login` token, unless that header is
-  marked as an API key or the user gave its value (flag, `config set`, `key save`). **API keys only where marked**:
+  `logout.ts`, `auth/status.ts` — how a call authenticates. **Sign-in is the default** where the collection has one: module.json's `auth`
+  (`{headerName, tokenPrefix}`, from hitman-api's collection meta) names the header the `login` token goes in
+  (e.g. `proxy_auth_token`); `auth: null` means no sign-in, so `login` is never asked for; an API that sends no `auth`
+  (older) falls back to the stored sign-in's header, else `Authorization` (`signInHeaderOf`). An endpoint that sends
+  that header gets the `login` token (not signed in -> exit 4 saying `docstar-cli login <slug>`), unless that header is
+  marked as an API key or the user gave its value (flag, `config set`, `key save`). **API keys only where marked**, plus any other enabled header row with no value (`userValueHeaderRowsOf`: asked for as it is):
   a header/query row with `credential: "apiKey"` in module.json (marked by the docs owner; `apiKeyRowsOf`); the value is a
   flag, else the saved credential. Both are checked BEFORE calling (`MissingCredentialError`);
   `runEndpoint` asks in a TTY (hidden key, or runs `login`), else exits 4. hitman-api's `/p/cli-auth/*` holds the OAuth
@@ -76,12 +97,8 @@ and the collection level is what disambiguates them.
   locally, no network call.
 - `src/commands/mcp.ts` — starts a stdio MCP server exposing every installed endpoint (across
   every installed collection) as a tool, executed in-process via `src/lib/http.ts`.
-- `src/lib/codegen.ts` — generates the actual oclif command `.js` files under
-  `dist/commands/<collection>/<module>/`. These files are **regenerated by `init`, not
-  hand-edited**, and are wiped by `npm run build` (`shx rm -rf dist`) — re-run `init` for every
-  installed collection after a rebuild.
-- `src/lib/http.ts` — `loadModule`, `findEndpoint`, `executeCliCommand`: builds and sends the
-  actual HTTP request from a saved endpoint contract. This is where request-building
+- `src/lib/http.ts` — `findEndpoint`, `executeEndpoint` (runs a contract just fetched), `executeCliCommand` (fetches
+  then runs; what MCP-style callers use): builds and sends the actual HTTP request from an endpoint contract. This is where request-building
   correctness bugs live if a call fails unexpectedly. Two real bugs were found and fixed here —
   know about them before "fixing" something that looks similar:
   - **Type coercion**: CLI flags always arrive as strings. `buildBody` must coerce them back to

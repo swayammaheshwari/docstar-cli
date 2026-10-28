@@ -1,10 +1,8 @@
-import {readFile} from 'node:fs/promises'
-
-import type {ApiKeyRow, EndpointContract, ModuleJson} from './types.js'
+import type {ApiKeyRow, EndpointContract, SignInHint} from './types.js'
 
 import {getSignIn, refreshSignIn, type SignIn, SignInExpiredError, usableSignIn} from './auth.js'
+import {apiOfCollection, fetchEndpoint} from './contracts.js'
 import {MissingCredentialError, savedCredentialsOf, setHeader, setQueryParam, valueByName} from './credentials.js'
-import {modulePath} from './paths.js'
 
 // Endpoint fields come from a rich-text editor and may be wrapped in
 // `<span text-block="true">...</span>`-style markup; unwrap to the raw value.
@@ -16,21 +14,32 @@ const substitutePlaceholders = (template: string, params: Record<string, string>
     template,
   )
 
-export const loadModule = async (slug: string, modulePathSegment: string): Promise<ModuleJson> => {
-  const raw = await readFile(modulePath(slug, modulePathSegment), 'utf8')
-  return JSON.parse(raw) as ModuleJson
-}
-
-export const findEndpoint = (moduleJson: ModuleJson, commandName: string): EndpointContract | undefined =>
-  moduleJson.endpoints.find(
-    (endpoint) => endpoint.cli.command.name === commandName || endpoint.cli.command.aliases.includes(commandName),
+// The docs' URL carries the query as the owner wrote it (`?startDate=&amp;endDate=`), and `params` describes each value. Every
+// enabled parameter gets the user's value (a flag of its name), else the one in the URL, else the docs' own; one with no value
+// is left out. API-key parameters are the user's own and are added separately.
+const withQuery = (url: string, endpoint: EndpointContract, params: Record<string, string>): string => {
+  const rows = Object.entries(endpoint.params || {}).filter(
+    ([, row]) => String((row as {checked?: unknown})?.checked) !== 'false' && (row as {credential?: unknown})?.credential !== 'apiKey',
   )
+  if (rows.length === 0) return url
+
+  const [path, ...rest] = url.split('?')
+  const search = new URLSearchParams(rest.join('?').replaceAll('&amp;', '&'))
+  for (const [rawName, row] of rows) {
+    const name = stripHtml(rawName)
+    const value = params[name] ?? (search.get(name) || stripHtml((row as {value?: string})?.value))
+    if (value) search.set(name, value)
+    else search.delete(name)
+  }
+
+  const query = search.toString()
+  return query ? `${path}?${query}` : path
+}
 
 const buildUrl = (endpoint: EndpointContract, params: Record<string, string>): string => {
   const baseUrl = stripHtml(endpoint.baseUrl)
   const path = substitutePlaceholders(stripHtml(endpoint.url), params)
-  if (/^https?:\/\//.test(path)) return path
-  return `${baseUrl}${path}`
+  return withQuery(/^https?:\/\//.test(path) ? path : `${baseUrl}${path}`, endpoint, params)
 }
 
 const buildHeaders = (endpoint: EndpointContract, params: Record<string, string>): Record<string, string> => {
@@ -106,8 +115,16 @@ const buildBody = (endpoint: EndpointContract, params: Record<string, string>): 
   return JSON.stringify(parsed)
 }
 
-// The header a signed-in user's token goes in: the one their sign-in gave (the owner's sign-in header), else Authorization
+// The header a signed-in user's token goes in when the docs don't say (an older API): the one their sign-in gave, else Authorization
 const DEFAULT_SIGN_IN_HEADER = 'Authorization'
+
+// The header the user's sign-in token goes in for this collection, or null when it has no sign-in. module.json's `auth`
+// says (null = the owner has no sign-in, so `login` can't work and is never asked for); an API that doesn't send it
+// falls back to the header of the user's stored sign-in, else Authorization.
+export const signInHeaderOf = (auth: SignInHint | null | undefined, storedHeader?: null | string): null | string => {
+  if (auth === null) return null
+  return auth?.headerName || storedHeader || DEFAULT_SIGN_IN_HEADER
+}
 
 const sendsHeader = (endpoint: EndpointContract, name: string): boolean =>
   Object.entries(endpoint.headers || {}).some(
@@ -126,27 +143,42 @@ export const apiKeyRowsOf = (endpoint: EndpointContract): ApiKeyRow[] => {
   return [...marked(endpoint.headers, 'header'), ...marked(endpoint.params, 'query')]
 }
 
-// What an endpoint needs to authenticate: the API keys the owner marked, and whether it runs on the sign-in (it sends
-// the sign-in header, and that header isn't an API key)
-export const endpointNeeds = (endpoint: EndpointContract, signInHeader = DEFAULT_SIGN_IN_HEADER): {apiKeys: string[]; signIn: boolean} => {
-  const apiKeys = apiKeyRowsOf(endpoint).map((row) => row.name)
-  const signIn = sendsHeader(endpoint, signInHeader) && !apiKeys.some((name) => name.toLowerCase() === signInHeader.toLowerCase())
+// Header rows the docs list without a value that are neither the sign-in header nor marked as API keys: there is nothing
+// to send until the user gives the value, so they're asked for it as it is (flag, `config set`, or a prompt)
+export const userValueHeaderRowsOf = (endpoint: EndpointContract, signInHeader: null | string): ApiKeyRow[] => {
+  const marked = new Set(apiKeyRowsOf(endpoint).filter((row) => row.in === 'header').map((row) => row.name.toLowerCase()))
+  return Object.entries(endpoint.headers || {})
+    .filter(([name, entry]) => {
+      const row = entry as null | string | {checked?: unknown; value?: unknown}
+      const value = typeof row === 'string' ? row : row?.value
+      const lower = stripHtml(name).toLowerCase()
+      return (
+        String((row as {checked?: unknown} | null)?.checked) !== 'false' &&
+        stripHtml(typeof value === 'string' ? value : '').trim() === '' &&
+        lower !== signInHeader?.toLowerCase() &&
+        !marked.has(lower)
+      )
+    })
+    .map(([name]) => ({in: 'header' as const, name: stripHtml(name)}))
+}
+
+// What an endpoint needs to authenticate: the values only the user has (API keys the owner marked, and header rows with
+// no value), and whether it runs on the sign-in (it sends the sign-in header, and that header isn't an API key)
+export const endpointNeeds = (endpoint: EndpointContract, signInHeader: null | string = DEFAULT_SIGN_IN_HEADER): {apiKeys: string[]; signIn: boolean} => {
+  const apiKeys = [...apiKeyRowsOf(endpoint), ...userValueHeaderRowsOf(endpoint, signInHeader)].map((row) => row.name)
+  const signIn = signInHeader !== null && sendsHeader(endpoint, signInHeader) && !apiKeys.some((name) => name.toLowerCase() === signInHeader.toLowerCase())
   return {apiKeys, signIn}
 }
 
-export const executeCliCommand = async (
+export type ExecuteResult = {body: unknown; hint?: string; status: number}
+
+// Runs one endpoint that was just fetched: `moduleJson.auth` is the collection's sign-in header
+export const executeEndpoint = async (
   slug: string,
-  modulePathSegment: string,
-  commandName: string,
+  moduleJson: {auth?: SignInHint | null},
+  endpoint: EndpointContract,
   params: Record<string, string>,
-): Promise<{body: unknown; hint?: string; status: number}> => {
-  const moduleJson = await loadModule(slug, modulePathSegment)
-  const endpoint = findEndpoint(moduleJson, commandName)
-
-  if (!endpoint) {
-    throw new Error(`No endpoint found for command "${commandName}" in module "${slug} ${modulePathSegment}"`)
-  }
-
+): Promise<ExecuteResult> => {
   // Saved credentials (`config set`, `key save`) fill the request like flags do; a flag for the same name wins
   const saved = await savedCredentialsOf(slug)
   const effectiveParams = {...saved, ...params}
@@ -157,7 +189,9 @@ export const executeCliCommand = async (
 
   // 1. The rows the docs owner marked as API keys: the user's own key (a flag on this call, else the saved one),
   //    checked BEFORE calling, so a missing key stops here with what to do instead of a request the API can only refuse
-  const apiKeys = apiKeyRowsOf(endpoint)
+  const stored = await getSignIn(slug)
+  const signInHeader = signInHeaderOf(moduleJson.auth, stored?.tokenHeader)
+  const apiKeys = [...apiKeyRowsOf(endpoint), ...userValueHeaderRowsOf(endpoint, signInHeader)]
   const keySources: Array<{fromFlag: boolean; name: string}> = []
   for (const spec of apiKeys) {
     const anyCase = spec.in === 'header'
@@ -171,9 +205,10 @@ export const executeCliCommand = async (
 
   // 2. Everything else runs on the sign-in by default: an endpoint that sends the sign-in header gets the user's token
   //    there, unless that header is marked as an API key or the user gave its value themselves (flag, `config set`)
-  const stored = await getSignIn(slug)
-  const signInHeader = stored?.tokenHeader || DEFAULT_SIGN_IN_HEADER
+  // Only read where `needsSignIn` is true, i.e. the collection has a sign-in header
+  const signInName = signInHeader ?? DEFAULT_SIGN_IN_HEADER
   const needsSignIn =
+    signInHeader !== null &&
     sendsHeader(endpoint, signInHeader) &&
     !apiKeys.some((spec) => spec.in === 'header' && spec.name.toLowerCase() === signInHeader.toLowerCase()) &&
     valueByName(effectiveParams, signInHeader) === undefined
@@ -181,14 +216,18 @@ export const executeCliCommand = async (
   let signIn: null | SignIn = null
   if (needsSignIn) {
     signIn = await usableSignIn(slug).catch((error: unknown) => {
-      if (error instanceof SignInExpiredError) throw new MissingCredentialError(slug, 'signIn', signInHeader, true)
+      if (error instanceof SignInExpiredError) throw new MissingCredentialError(slug, 'signIn', signInName, true)
       throw error
     })
-    if (!signIn) throw new MissingCredentialError(slug, 'signIn', signInHeader)
+    if (!signIn) throw new MissingCredentialError(slug, 'signIn', signInName)
   }
 
+  // The prefix is the one the sign-in's own header takes; the docs' header (`auth`) may be another one with its own
+  const prefixOf = (current: SignIn): string =>
+    moduleJson.auth && moduleJson.auth.headerName.toLowerCase() !== current.tokenHeader.toLowerCase() ? moduleJson.auth.tokenPrefix : current.tokenPrefix
+
   const send = async () => {
-    const withToken = signIn ? setHeader(headers, signInHeader, signIn.tokenPrefix ? `${signIn.tokenPrefix} ${signIn.accessToken}` : signIn.accessToken) : headers
+    const withToken = signIn ? setHeader(headers, signInName, prefixOf(signIn) ? `${prefixOf(signIn)} ${signIn.accessToken}` : signIn.accessToken) : headers
     return fetch(url, {body, headers: withToken, method: endpoint.method})
   }
 
@@ -196,7 +235,7 @@ export const executeCliCommand = async (
   let response = await send()
   if (response.status === 401 && signIn?.refreshToken) {
     signIn = await refreshSignIn(slug, signIn).catch((error: unknown) => {
-      if (error instanceof SignInExpiredError) throw new MissingCredentialError(slug, 'signIn', signInHeader, true)
+      if (error instanceof SignInExpiredError) throw new MissingCredentialError(slug, 'signIn', signInName, true)
       throw error
     })
     response = await send()
@@ -207,6 +246,17 @@ export const executeCliCommand = async (
 
   const hint = refusalHint(slug, response.status, keySources, Boolean(signIn))
   return hint ? {body: responseBody, hint, status: response.status} : {body: responseBody, status: response.status}
+}
+
+// Reads the endpoint's contract now (one request) and runs it, by command name (what MCP callers use)
+export const executeCliCommand = async (
+  slug: string,
+  modulePathSegment: string,
+  commandName: string,
+  params: Record<string, string>,
+): Promise<ExecuteResult> => {
+  const {auth, endpoint} = await fetchEndpoint(slug, modulePathSegment, commandName, await apiOfCollection(slug))
+  return executeEndpoint(slug, {auth}, endpoint, params)
 }
 
 // What to do when the API refuses a call (401/403): names what it refused, never its value

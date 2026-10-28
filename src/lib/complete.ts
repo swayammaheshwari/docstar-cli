@@ -1,33 +1,16 @@
-import {readFile} from 'node:fs/promises'
-import {parseSavedConfig} from './config.js'
-import {loadModule} from './http.js'
-import {configPath, isRootModule} from './paths.js'
-import type {SavedConfig} from './types.js'
-
-const readSavedConfig = async (): Promise<SavedConfig> => {
-  try {
-    return parseSavedConfig(await readFile(configPath(), 'utf8'))
-  } catch {
-    return {collections: []}
-  }
-}
+import {registeredCollection} from './contracts.js'
+import {isRootModule} from './paths.js'
 
 // Suggestions for shell completion — intentionally scoped to module names (given a collection)
 // and endpoint command names/aliases (given a collection + module). Never suggests collection
 // names or top-level commands (list/init/mcp/...); the user is expected to type the collection
-// themselves.
+// themselves. Only what `init` registered is offered: completion never calls the network.
 export const completeModules = async (slug: string): Promise<string[]> => {
-  const savedConfig = await readSavedConfig()
-  const collection = savedConfig.collections.find((c) => c.slug === slug)
+  const collection = await registeredCollection(slug)
   return collection ? collection.modules.map((module) => module.path).filter((path) => !isRootModule(path)) : []
 }
 
 export const completeEndpoints = async (slug: string, modulePathSegment: string): Promise<string[]> => {
-  try {
-    const moduleJson = await loadModule(slug, modulePathSegment)
-    const names = moduleJson.endpoints.flatMap((endpoint) => [endpoint.cli.command.name, ...endpoint.cli.command.aliases])
-    return [...new Set(names)]
-  } catch {
-    return []
-  }
+  const collection = await registeredCollection(slug)
+  return collection?.modules.find((module) => module.path === modulePathSegment)?.commands ?? []
 }

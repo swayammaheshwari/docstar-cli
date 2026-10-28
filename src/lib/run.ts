@@ -1,9 +1,7 @@
-import type {Command} from '@oclif/core'
-
 import {confirm, password} from '@inquirer/prompts'
 
 import {maskKey, MissingCredentialError, storeCredential} from './credentials.js'
-import {executeCliCommand} from './http.js'
+import {type ExecuteResult} from './http.js'
 import {promptForMissingParams} from './prompt.js'
 
 // Exit codes: 1 = the API answered with an error (4xx/5xx) or the call failed, 4 = a credential is missing (the message
@@ -11,17 +9,31 @@ import {promptForMissingParams} from './prompt.js'
 export const EXIT_API_ERROR = 1
 export const EXIT_CREDENTIAL_MISSING = 4
 
+// Where a command talks to the user and how it ends: `error` and `exit` stop the command by throwing an ExitSignal
+export type RunIo = {
+  error: (message: string, options?: {exit?: number}) => never
+  exit: (code: number) => never
+  log: (line: string) => void
+  login: (slug: string) => Promise<void>
+}
+
+export class ExitSignal extends Error {
+  constructor(public readonly code: number) {
+    super(`exit ${code}`)
+  }
+}
+
 // Someone is at a keyboard: prompts can be answered (never when an AI assistant or CI runs the command)
 const canAsk = (): boolean => Boolean(process.stdin.isTTY && process.stdout.isTTY && !process.env.CI)
 
 // Asks for what's missing, in a terminal: the API key (hidden, optionally saved like `config set`), or a sign-in (runs
 // `login`). Returns false when the user declines, so the command stops with the message.
-const askFor = async (command: Command, error: MissingCredentialError, params: Record<string, string>): Promise<boolean> => {
+const askFor = async (command: RunIo, error: MissingCredentialError, params: Record<string, string>): Promise<boolean> => {
   const {kind, name, slug} = error
   if (kind === 'signIn') {
     command.log(error.message.split('\n')[0])
     if (!(await confirm({default: true, message: `Sign in to ${slug} now?`}))) return false
-    await command.config.runCommand('login', [slug])
+    await command.login(slug)
     return true
   }
 
@@ -46,17 +58,17 @@ const askFor = async (command: Command, error: MissingCredentialError, params: R
 type RunDeps = {
   ask: typeof askFor
   canAsk: () => boolean
-  execute: typeof executeCliCommand
 }
 
-// What every generated endpoint command runs: asks for missing required parameters, checks the credentials the
-// endpoint needs before calling, prints the API's answer, and exits 1 when the API answered with an error.
+// What every endpoint command runs: asks for missing required parameters, checks the credentials the endpoint needs
+// before calling (`target.execute` throws MissingCredentialError), prints the API's answer, and exits 1 when the API
+// answered with an error.
 export const runEndpoint = async (
-  command: Command,
-  call: {command: string; module: string; slug: string},
+  io: RunIo,
+  target: {execute: (params: Record<string, string>) => Promise<ExecuteResult>},
   params: Record<string, string>,
   required: string[],
-  deps: RunDeps = {ask: askFor, canAsk, execute: executeCliCommand},
+  deps: RunDeps = {ask: askFor, canAsk},
 ): Promise<void> => {
   Object.assign(params, await promptForMissingParams(required, params))
 
@@ -66,16 +78,17 @@ export const runEndpoint = async (
   for (;;) {
     try {
       // eslint-disable-next-line no-await-in-loop
-      const result = await deps.execute(call.slug, call.module, call.command, params)
-      command.log(JSON.stringify(result, null, 2))
-      if (result.status >= 400) command.exit(EXIT_API_ERROR)
+      const result = await target.execute(params)
+      io.log(JSON.stringify(result, null, 2))
+      if (result.status >= 400) io.exit(EXIT_API_ERROR)
       return
     } catch (error) {
-      if ((error as {oclif?: unknown}).oclif) throw error
-      if (!(error instanceof MissingCredentialError)) command.error((error as Error).message, {exit: EXIT_API_ERROR})
-      const id = `${error.kind}:${error.name.toLowerCase()}`
+      if (error instanceof ExitSignal) throw error
+      if (!(error instanceof MissingCredentialError)) io.error((error as Error).message, {exit: EXIT_API_ERROR})
+      const missing = error as MissingCredentialError
+      const id = `${missing.kind}:${missing.name.toLowerCase()}`
       // eslint-disable-next-line no-await-in-loop
-      if (asked.has(id) || !deps.canAsk() || !(await deps.ask(command, error, params))) command.error(error.message, {exit: EXIT_CREDENTIAL_MISSING})
+      if (asked.has(id) || !deps.canAsk() || !(await deps.ask(io, missing, params))) io.error(missing.message, {exit: EXIT_CREDENTIAL_MISSING})
       asked.add(id)
     }
   }

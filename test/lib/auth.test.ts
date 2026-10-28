@@ -11,8 +11,9 @@ import {
   waitForSignIn,
 } from '../../src/lib/auth.js'
 import {MissingCredentialError} from '../../src/lib/credentials.js'
-import {executeCliCommand} from '../../src/lib/http.js'
-import {credentialsPath, modulePath} from '../../src/lib/paths.js'
+import {executeEndpoint} from '../../src/lib/http.js'
+import type {EndpointContract} from '../../src/lib/types.js'
+import {credentialsPath} from '../../src/lib/paths.js'
 
 const API = 'https://api.docstar.test'
 
@@ -31,10 +32,20 @@ const signIn = (overrides: Partial<SignIn> = {}): SignIn => ({
 
 type Call = {body?: string; headers: Record<string, string>; url: string}
 
+// The docs, as `generate-module-json` answers: every command reads them live. Not counted as a call.
+let contract: unknown = {}
+
+// Runs one endpoint of `contract` by command name, as `executeCliCommand` does once it has read the endpoint's OpenAPI file
+const exec = (command: string, params: Record<string, string>) => {
+  const {auth, endpoints} = contract as {auth?: {headerName: string; tokenPrefix: string} | null; endpoints: EndpointContract[]}
+  return executeEndpoint('acme', {auth}, endpoints.find((candidate) => candidate.cli.command.name === command)!, params)
+}
+
 // Answers fetch calls in order from `answers`, recording each call
 const stubFetch = (answers: Array<{body: unknown; status: number}>): Call[] => {
   const calls: Call[] = []
   globalThis.fetch = (async (url: string, init: {body?: string; headers?: Record<string, string>}) => {
+    if (String(url).includes('/p/generate-module-json')) return new Response(JSON.stringify(contract), {headers: {'content-type': 'application/json'}, status: 200})
     calls.push({body: init.body, headers: init.headers || {}, url: String(url)})
     const answer = answers.shift()
     if (!answer) throw new Error(`unexpected call to ${url}`)
@@ -102,10 +113,8 @@ describe('auth', () => {
 
   describe('calling an endpoint while signed in', () => {
     beforeEach(async () => {
-      await mkdir(join(home, '.docstar', 'modules', 'acme'), {recursive: true})
-      await writeFile(
-        modulePath('acme', 'apps'),
-        JSON.stringify({
+      contract =
+        {
           endpoints: [
             {
               baseUrl: 'https://api.acme.test',
@@ -119,14 +128,13 @@ describe('auth', () => {
             },
           ],
           module: {id: 'apps', name: 'Apps', version: '1.0.0'},
-        }),
-      )
+        }
     })
 
     it('sends the token', async () => {
       await saveSignIn('acme', signIn())
       const calls = stubFetch([{body: [{id: 1}], status: 200}])
-      const result = await executeCliCommand('acme', 'apps', 'list-apps', {})
+      const result = await exec('list-apps', {})
       expect(result).to.deep.equal({body: [{id: 1}], status: 200})
       expect(calls[0].headers.Authorization).to.equal('Bearer AT-old')
     })
@@ -137,7 +145,7 @@ describe('auth', () => {
         {body: {accessToken: 'AT-new', expiresIn: 3600, refreshToken: null, tokenHeader: 'Authorization', tokenPrefix: 'Bearer'}, status: 200},
         {body: [], status: 200},
       ])
-      await executeCliCommand('acme', 'apps', 'list-apps', {})
+      await exec('list-apps', {})
       expect(calls[0].url).to.equal(`${API}/p/cli-auth/refresh`)
       expect(JSON.parse(calls[0].body!)).to.deep.equal({collectionId: 'c1', refreshToken: 'RT'})
       expect(calls[1].headers.Authorization).to.equal('Bearer AT-new')
@@ -152,7 +160,7 @@ describe('auth', () => {
         {body: {accessToken: 'AT-new', expiresIn: 3600, refreshToken: 'RT2', tokenHeader: 'Authorization', tokenPrefix: 'Bearer'}, status: 200},
         {body: {ok: true}, status: 200},
       ])
-      const result = await executeCliCommand('acme', 'apps', 'list-apps', {})
+      const result = await exec('list-apps', {})
       expect(result.status).to.equal(200)
       expect(calls[2].headers.Authorization).to.equal('Bearer AT-new')
       expect((await getSignIn('acme'))?.refreshToken).to.equal('RT2')
@@ -165,7 +173,7 @@ describe('auth', () => {
         {body: {error: 'Your sign-in has expired'}, status: 401},
       ])
       let caught: unknown
-      await executeCliCommand('acme', 'apps', 'list-apps', {}).catch((error: unknown) => {
+      await exec('list-apps', {}).catch((error: unknown) => {
         caught = error
       })
       expect(caught).to.be.instanceOf(MissingCredentialError)
@@ -177,7 +185,7 @@ describe('auth', () => {
     it('stops before calling when the endpoint needs a sign-in and there is none', async () => {
       const calls = stubFetch([])
       let caught: unknown
-      await executeCliCommand('acme', 'apps', 'list-apps', {}).catch((error: unknown) => {
+      await exec('list-apps', {}).catch((error: unknown) => {
         caught = error
       })
       expect(caught).to.be.instanceOf(MissingCredentialError)
@@ -187,7 +195,7 @@ describe('auth', () => {
 
     it('sends a sign-in header the user passed as it is', async () => {
       const calls = stubFetch([{body: {}, status: 200}])
-      await executeCliCommand('acme', 'apps', 'list-apps', {Authorization: 'Bearer mine'})
+      await exec('list-apps', {Authorization: 'Bearer mine'})
       expect(calls[0].headers.Authorization).to.equal('Bearer mine')
     })
   })

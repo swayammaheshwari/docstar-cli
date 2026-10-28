@@ -7,9 +7,8 @@ export const configPath = (): string => join(configDir(), 'config.json')
 export const credentialsPath = (): string => join(configDir(), 'credentials.json')
 // Sign-ins started with `login --no-wait`, finished by `login --continue`
 export const pendingSignInsPath = (): string => join(configDir(), 'pending-sign-ins.json')
-export const modulesDir = (): string => join(configDir(), 'modules')
-export const collectionModulesDir = (slug: string): string => join(modulesDir(), slug)
-export const modulePath = (slug: string, modulePathSegment: string): string => join(collectionModulesDir(slug), `${modulePathSegment}.json`)
+// Contracts are no longer saved (they're fetched on every call); 1.x saved them here, and `init`/`clean` remove what's left
+export const collectionModulesDir = (slug: string): string => join(configDir(), 'modules', slug)
 
 // Endpoints at the collection root (outside every module) are stored as a pseudo-module under this key so they share
 // the module.json plumbing; unlike real modules their commands live directly under the collection: `<collection> <endpoint>`.
