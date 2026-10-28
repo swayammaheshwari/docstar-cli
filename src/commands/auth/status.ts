@@ -6,7 +6,9 @@ import type {CollectionConfig} from '../../lib/types.js'
 import {readSignIns, type SignIn} from '../../lib/auth.js'
 import {parseSavedConfig} from '../../lib/config.js'
 import {maskKey, sendableCredentials, valueByName} from '../../lib/credentials.js'
-import {endpointNeeds, loadModule} from '../../lib/http.js'
+import {fetchModuleIndex} from '../../lib/contracts.js'
+import {entryNeeds} from '../../lib/endpoint-flags.js'
+import {signInHeaderOf} from '../../lib/http.js'
 import {configPath} from '../../lib/paths.js'
 
 const expiryText = (signIn: SignIn, now: number): string => {
@@ -16,15 +18,16 @@ const expiryText = (signIn: SignIn, now: number): string => {
   return signIn.refreshToken ? 'signed in, token expired (refreshed on the next call)' : 'sign-in expired'
 }
 
-// What the collection's installed endpoints need: every API key name (once), and whether any runs on the sign-in
-const neededBy = async (collection: CollectionConfig, signInHeader?: string): Promise<{apiKeys: string[]; signIn: boolean}> => {
+// What the collection's registered endpoints need: every API key name (once), and whether any runs on the sign-in
+const neededBy = async (collection: CollectionConfig, storedHeader?: string): Promise<{apiKeys: string[]; signIn: boolean}> => {
   const apiKeys = new Map<string, string>()
   let signIn = false
   for (const module of collection.modules) {
     // eslint-disable-next-line no-await-in-loop
-    const moduleJson = await loadModule(collection.slug, module.path).catch(() => null)
-    for (const endpoint of moduleJson?.endpoints || []) {
-      const needs = endpointNeeds(endpoint, signInHeader)
+    const index = await fetchModuleIndex(collection.slug, module.path, collection.api).catch(() => null)
+    const signInHeader = index ? signInHeaderOf(index.auth, storedHeader) : null
+    for (const entry of index?.endpoints || []) {
+      const needs = entryNeeds(entry, signInHeader)
       for (const name of needs.apiKeys) if (!apiKeys.has(name.toLowerCase())) apiKeys.set(name.toLowerCase(), name)
       signIn ||= needs.signIn
     }

@@ -24,24 +24,29 @@ npm link
 
 ## Quick start
 
-### 1. Discover and install modules
+### 1. Run any collection — no setup
+
+```sh
+docstar-cli msg91 sms send-sms --template_id 123 --recipients '[...]'
+```
+
+Any collection works straight away: the CLI reads its docs when you run the command (so edits to the docs show up immediately), asks for anything missing (parameters, your API key, a sign-in) and calls the API. `docstar-cli msg91` lists the modules, `docstar-cli msg91 sms` the endpoints of a module, and `--help` on an endpoint its flags. Needs network access. To read the docs from another DocStar API (a local or dev one), set `DOCSTAR_API_URL`.
+
+### 2. Register modules (optional)
 
 ```sh
 docstar-cli init msg91
 ```
 
-`msg91` is the collection's slug, not its domain. The docs are read from `https://api.docstar.io`; to read them from another DocStar API (a local or dev one), pass `--api`:
+`msg91` is the collection's slug, not its domain. `init` also creates a `msg91` command, so you can run `msg91 <module> <endpoint>` instead of `docstar-cli msg91 <module> <endpoint>` (skip with `--no-alias`; for collections installed earlier run `docstar-cli alias msg91`). It sits next to `docstar-cli` on your PATH, or in `~/.docstar/bin` (add that to PATH) if no PATH directory is writable. The docs are read from `https://api.docstar.io`; to read them from another DocStar API (a local or dev one), pass `--api`:
 
 ```sh
 docstar-cli init msg91 --api http://localhost:2000
 ```
 
-This fetches the list of published modules for that collection and shows an interactive checklist (nothing checked by default — press `space` to toggle a module, or select the **"Select all modules"** entry at the bottom of the list to install everything, then `enter` to confirm). For each selected module it:
+This fetches the list of published modules for that collection and shows an interactive checklist (nothing checked by default — press `space` to toggle a module, or select the **"Select all modules"** entry at the bottom of the list to register everything, then `enter` to confirm). Registering only records the chosen modules and their command names in `~/.docstar/config.json`: it gives you the `<slug>` shortcut, shell completion for them, and their endpoints as MCP tools. Nothing is downloaded or generated.
 
-- saves its full endpoint contract to `~/.docstar/modules/<slug>/<module>.json`
-- registers a real CLI command for every endpoint: `docstar-cli <slug> <module> <command>`
-
-The **slug** is chosen when the collection is created in DocStar (lowercase letters, numbers, `-` and `_` only) and never changes afterwards; the same slug identifies the collection for MCP. Running `init` for a different slug adds it alongside any others already installed — nothing gets overwritten.
+The **slug** is chosen when the collection is created in DocStar (lowercase letters, numbers, `-` and `_` only) and never changes afterwards; the same slug identifies the collection for MCP. Running `init` for a different slug adds it alongside any others already registered — nothing gets overwritten.
 
 Everything is saved to `~/.docstar/config.json`, grouped by collection.
 
@@ -197,9 +202,8 @@ key's last 4 characters, since AI assistants read their output; `config get` doe
 
 ## How it works
 
-- `docstar-cli init <slug>` talks to `GET /p/generate-module-json?slug=<slug>` (the collection's name, slug, and list of modules) and `GET /p/generate-module-json?slug=<slug>&path=<module>` (a module's endpoint contract, or `scope=root` for root endpoints) on the DocStar API.
-- Each endpoint's contract (method, url, base url, headers, body, and CLI parameter names) is saved locally and used to build the real HTTP request when you run its command — no network round-trip to the docs site is needed to run a command once a module is installed.
-- Commands are generated as real files on disk under this repo's `dist/commands/<slug>/<module>/`, which is why `npm run build` (it wipes `dist/`) requires re-running `docstar-cli init` for each installed collection afterwards to reinstall your modules.
+- Running `docstar-cli <slug> <module> <command>` makes one request to the DocStar API: `GET /p/generate-module-json?slug=<slug>&path=<module>/<command>`, that one endpoint's contract (method, url, base url, headers, query parameters, body, CLI parameter names, and the collection's sign-in header). The request is built from it. `docstar-cli <slug>` and `docstar-cli <slug> <module>` read the collection's modules and a module's list of endpoints (names and parameters only). Nothing is saved: every command reads the docs as they are. On a docs site the same levels are `/module.json`, `/<module>/module.json` and `/<module>/<endpoint>/module.json`.
+- `docstar-cli init <slug>` only registers modules in `~/.docstar/config.json`. No command files are generated, so rebuilding this repo loses nothing.
 
 ## Development
 

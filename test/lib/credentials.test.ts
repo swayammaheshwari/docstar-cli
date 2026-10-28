@@ -26,6 +26,14 @@ describe('credentials', () => {
     await rm(home, {force: true, recursive: true})
   })
 
+  it('saves a key for a collection nobody registered, even on a machine with no config', async () => {
+    await rm(join(home, '.docstar'), {force: true, recursive: true})
+    expect(await storeCredential('acme', 'authkey', 'k_9')).to.equal(false)
+    const collection = (await saved()).collections.find((candidate) => candidate.slug === 'acme')
+    expect(collection?.modules).to.deep.equal([])
+    expect(collection?.credentials).to.deep.equal({authkey: 'k_9'})
+  })
+
   it('stores a credential with what key emit needs, readable by the owner only', async () => {
     expect(await storeCredential('msg91', 'authkey', 'k_123456', {envVar: 'MSG91_AUTH_KEY'})).to.equal(false)
     expect(await readCredential('msg91', 'authkey')).to.deep.equal({meta: {envVar: 'MSG91_AUTH_KEY'}, value: 'k_123456'})
@@ -42,14 +50,6 @@ describe('credentials', () => {
     await storeCredential('msg91', 'authkey', 'old', {envVar: 'A', prefix: 'Bearer'})
     await storeCredential('msg91', 'authkey', 'bare')
     expect((await saved()).collections[0].credentialMeta).to.deep.equal({})
-  })
-
-  it('refuses a collection that is not installed, and names the command to run', async () => {
-    let message = ''
-    await storeCredential('other', 'authkey', 'x').catch((error: Error) => {
-      message = error.message
-    })
-    expect(message).to.include('docstar-cli init other')
   })
 
   it('says when no credential has that name', async () => {

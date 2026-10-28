@@ -1,9 +1,9 @@
-import {chmod, readFile, writeFile} from 'node:fs/promises'
+import {chmod, mkdir, readFile, writeFile} from 'node:fs/promises'
 
 import type {CollectionConfig, CredentialMeta, SavedConfig} from './types.js'
 
 import {parseSavedConfig} from './config.js'
-import {configPath} from './paths.js'
+import {configDir, configPath} from './paths.js'
 
 // Names a credential can have: a header or param name of the endpoints (authkey, Authorization, X-Api-Key)
 export const CREDENTIAL_NAME_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/
@@ -22,8 +22,18 @@ const readSavedConfig = async (): Promise<SavedConfig> => {
 
 // The config holds credentials, so it is readable by its owner only
 export const writeSavedConfig = async (savedConfig: SavedConfig): Promise<void> => {
+  await mkdir(configDir(), {recursive: true})
   await writeFile(configPath(), JSON.stringify(savedConfig, null, 2), {mode: 0o600})
   await chmod(configPath(), 0o600)
+}
+
+// Saving a key doesn't need `init`: commands run without it, so the collection is made on the spot (with no modules)
+const readSavedConfigOrEmpty = async (): Promise<SavedConfig> => {
+  try {
+    return parseSavedConfig(await readFile(configPath(), 'utf8'))
+  } catch {
+    return {collections: []}
+  }
 }
 
 const findCollection = (savedConfig: SavedConfig, slug: string): CollectionConfig => {
@@ -34,8 +44,13 @@ const findCollection = (savedConfig: SavedConfig, slug: string): CollectionConfi
 
 // Saves a credential under its collection. Returns whether one with that name was already there (and so replaced).
 export const storeCredential = async (slug: string, name: string, value: string, meta: CredentialMeta = {}): Promise<boolean> => {
-  const savedConfig = await readSavedConfig()
-  const collection = findCollection(savedConfig, slug)
+  const savedConfig = await readSavedConfigOrEmpty()
+  let collection = savedConfig.collections.find((candidate) => candidate.slug === slug)
+  if (!collection) {
+    collection = {modules: [], name: slug, slug, updatedAt: new Date().toISOString()}
+    savedConfig.collections.push(collection)
+  }
+
   const replaced = collection.credentials !== undefined && name in collection.credentials
   collection.credentials = {...collection.credentials, [name]: value}
   const otherMeta = {...collection.credentialMeta}
