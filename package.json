@@ -12,6 +12,7 @@
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@oclif/core": "^4",
     "@oclif/plugin-help": "^6",
+    "@oclif/plugin-warn-if-update-available": "^4.0.5",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -49,9 +50,14 @@
     "dirname": "docstar-cli",
     "commands": "./dist/commands",
     "plugins": [
-      "@oclif/plugin-help"
+      "@oclif/plugin-help",
+      "@oclif/plugin-warn-if-update-available"
     ],
-    "topicSeparator": " "
+    "topicSeparator": " ",
+    "warn-if-update-available": {
+      "timeoutInDays": 1,
+      "message": "<%= config.name %> update available from <%= chalk.greenBright(config.version) %> to <%= chalk.greenBright(latest) %>. Run: npm install -g docstar-cli"
+    }
   },
   "repository": "swayammaheshwari/docstar-cli",
   "scripts": {
