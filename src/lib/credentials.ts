@@ -1,8 +1,10 @@
 import {chmod, mkdir, readFile, writeFile} from 'node:fs/promises'
+import {join} from 'node:path'
 
 import type {CollectionConfig, CredentialMeta, SavedConfig} from './types.js'
 
 import {parseSavedConfig} from './config.js'
+import {readEnvFile} from './env-file.js'
 import {configDir, configPath} from './paths.js'
 
 // Names a credential can have: a header or param name of the endpoints (authkey, Authorization, X-Api-Key)
@@ -68,11 +70,14 @@ export const readCredential = async (slug: string, name: string): Promise<{meta:
 }
 
 // What requests send: the saved value, with its scheme in front when `key save` stored one (Authorization: Bearer <key>)
-export const sendableCredentials = (collection: CollectionConfig | undefined): Record<string, string> =>
+export const sendableCredentials = (collection: CollectionConfig | undefined, env: Record<string, string | undefined> = process.env): Record<string, string> =>
   Object.fromEntries(
-    Object.entries(collection?.credentials ?? {}).map(([name, value]) => {
-      const prefix = collection?.credentialMeta?.[name]?.prefix
-      return [name, prefix ? `${prefix} ${value}` : value]
+    Object.entries(collection?.credentials ?? {}).map(([name, stored]) => {
+      const meta = collection?.credentialMeta?.[name]
+      // A reference (`config set --env`) holds no value: it is read from the variable now, and left empty (so it counts as
+      // missing) when the variable isn't set
+      const value = meta?.env ? env[meta.env] ?? '' : stored
+      return [name, value && meta?.prefix ? `${meta.prefix} ${value}` : value]
     }),
   )
 
@@ -80,7 +85,7 @@ export const sendableCredentials = (collection: CollectionConfig | undefined): R
 export const savedCredentialsOf = async (slug: string): Promise<Record<string, string>> => {
   try {
     const savedConfig = parseSavedConfig(await readFile(configPath(), 'utf8'))
-    return sendableCredentials(savedConfig.collections.find((collection) => collection.slug === slug))
+    return sendableCredentials(savedConfig.collections.find((collection) => collection.slug === slug), {...(await readEnvFile(join(process.cwd(), '.env'))), ...process.env})
   } catch {
     return {}
   }

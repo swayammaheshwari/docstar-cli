@@ -31,3 +31,20 @@ export const ensureGitignored = async (envFile: string): Promise<boolean> => {
   await writeFile(gitignore, `${existing}${separator}${name}\n`)
   return true
 }
+
+// The variables of an env file ({} when there is none): `NAME=value` lines, a JSON-quoted value read back as written
+export const readEnvFile = async (envFile: string): Promise<Record<string, string>> => {
+  const variables: Record<string, string> = {}
+  for (const line of (await readIfExists(envFile)).split(/\r?\n/)) {
+    const match = /^\s*(?:export\s+)?([A-Za-z_]\w*)=(.*)$/.exec(line)
+    if (!match) continue
+    const raw = match[2].trim()
+    try {
+      variables[match[1]] = raw.startsWith('"') ? (JSON.parse(raw) as string) : raw.replace(/^'(.*)'$/, '$1')
+    } catch {
+      variables[match[1]] = raw
+    }
+  }
+
+  return variables
+}

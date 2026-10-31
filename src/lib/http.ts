@@ -67,7 +67,10 @@ const buildHeaders = (endpoint: EndpointContract, params: Record<string, string>
 // key tells us its real type (boolean/number/array) — coerce back to that shape instead of
 // clobbering e.g. `getUrl: true` with the literal string "true", or `collectionIds: []` with a
 // plain string.
-const coerceToTemplateType = (existingValue: unknown, rawValue: string): unknown => {
+// A flag whose value can't be used as given (e.g. not JSON where a JSON object is expected); the command exits 2 with this
+export class InvalidParamError extends Error {}
+
+const coerceToTemplateType = (key: string, existingValue: unknown, rawValue: string): unknown => {
   if (typeof existingValue === 'boolean') return rawValue === 'true'
   if (typeof existingValue === 'number') {
     const parsedNumber = Number(rawValue)
@@ -90,8 +93,10 @@ const coerceToTemplateType = (existingValue: unknown, rawValue: string): unknown
       const parsed = JSON.parse(rawValue)
       if (typeof parsed === 'object' && parsed !== null) return parsed
     } catch {
-      // not a JSON object literal — fall through to the raw string
+      // not JSON: reported below
     }
+
+    throw new InvalidParamError(`--${key} must be a JSON object, e.g. --${key} '{"name":"value"}'`)
   }
 
   return rawValue
@@ -109,7 +114,7 @@ const buildBody = (endpoint: EndpointContract, params: Record<string, string>): 
   }
 
   for (const [key, value] of Object.entries(params)) {
-    if (key in parsed) parsed[key] = coerceToTemplateType(parsed[key], value)
+    if (key in parsed) parsed[key] = coerceToTemplateType(key, parsed[key], value)
   }
 
   return JSON.stringify(parsed)

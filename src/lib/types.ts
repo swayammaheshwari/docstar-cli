@@ -97,7 +97,8 @@ export type CollectionConfig = {
   credentialMeta?: Record<string, CredentialMeta>
 }
 
-export type CredentialMeta = {envVar?: string; prefix?: string}
+// `env`: the value is not stored, it is read from this environment variable (or the project's .env) on every call
+export type CredentialMeta = {env?: string; envVar?: string; prefix?: string}
 
 export type SavedConfig = {
   collections: CollectionConfig[]

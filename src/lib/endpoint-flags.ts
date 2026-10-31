@@ -34,11 +34,46 @@ const queryKeyFlagNames = (endpoint: EndpointContract): string[] => {
     .map((row) => row.name)
 }
 
+// The shape a body field takes, read from the docs' JSON body template (`--payload` is a JSON object, `--ids` a list)
+const shapeOf = (endpoint: EndpointContract, name: string): string => {
+  const raw = endpoint.body?.type === 'JSON' ? endpoint.body?.raw?.value : undefined
+  if (typeof raw !== 'string') return ''
+  let template: unknown
+  try {
+    template = JSON.parse(raw)
+  } catch {
+    return ''
+  }
+
+  const value = (template as null | Record<string, unknown>)?.[name]
+  if (Array.isArray(value)) return ' (a list: JSON array or comma-separated)'
+  if (value !== null && typeof value === 'object') return ' (a JSON object, e.g. \'{"key":"value"}\')'
+  if (typeof value === 'boolean') return ' (true or false)'
+  if (typeof value === 'number') return ' (a number)'
+  return ''
+}
+
+// `content_type` and `content-type` differ by one character: a body field and an HTTP header. Each one's help names the other.
+const squash = (name: string): string => name.toLowerCase().replaceAll(/[_-]/g, '')
+
+const lookalikeOf = (endpoint: EndpointContract, name: string, among: 'headers' | 'params'): string | undefined =>
+  (among === 'headers' ? headerFlagNames(endpoint) : [...endpoint.cli.parameters.required, ...endpoint.cli.parameters.optional]).find(
+    (other) => other !== name && squash(other) === squash(name),
+  )
+
+const paramSpec = (endpoint: EndpointContract, name: string, kind: string): FlagSpec => {
+  const twin = lookalikeOf(endpoint, name, 'headers')
+  return {description: `${kind} parameter${shapeOf(endpoint, name)}${twin ? `; a body field, not the \`--${twin}\` header` : ''}`, name}
+}
+
 // Every flag an endpoint command takes: its parameters, then the header and API-key flags
 export const flagSpecsOf = (endpoint: EndpointContract, signInHeader: null | string): FlagSpec[] => [
-  ...endpoint.cli.parameters.required.map((name) => ({description: 'Required parameter', name})),
-  ...endpoint.cli.parameters.optional.map((name) => ({description: 'Optional parameter', name})),
-  ...headerFlagNames(endpoint).map((name) => ({description: headerFlagDescription(endpoint, name, signInHeader), name})),
+  ...endpoint.cli.parameters.required.map((name) => paramSpec(endpoint, name, 'Required')),
+  ...endpoint.cli.parameters.optional.map((name) => paramSpec(endpoint, name, 'Optional')),
+  ...headerFlagNames(endpoint).map((name) => ({
+    description: `${headerFlagDescription(endpoint, name, signInHeader)}${lookalikeOf(endpoint, name, 'params') ? `; the HTTP header, not the \`--${lookalikeOf(endpoint, name, 'params')}\` body field` : ''}`,
+    name,
+  })),
   ...queryKeyFlagNames(endpoint).map((name) => ({description: API_KEY_FLAG_DESCRIPTION, name})),
 ]
 
@@ -54,6 +89,26 @@ export const credentialNote = (slug: string, endpoint: EndpointContract, signInH
 // The command as the user types it: `msg91 sms send-sms`, or `msg91 ping` for a root endpoint
 export const commandLineOf = (bin: string, slug: string, modulePathSegment: string, commandName: string): string =>
   [bin, slug, ...(isRootModule(modulePathSegment) ? [] : [modulePathSegment]), commandName].join(' ')
+
+// One call to copy: the required flags, a body field shown with the docs' own example value
+const exampleCall = (bin: string, slug: string, modulePathSegment: string, endpoint: EndpointContract): string => {
+  let template: Record<string, unknown> = {}
+  try {
+    const parsed = endpoint.body?.type === 'JSON' ? JSON.parse(endpoint.body?.raw?.value ?? '') : {}
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) template = parsed
+  } catch {
+    // no usable example body
+  }
+
+  const valueOf = (name: string): string => {
+    const value = template[name]
+    if (value === undefined) return `<${name}>`
+    const text = typeof value === 'object' ? JSON.stringify(value) : String(value)
+    return /^[\w.@:/-]+$/.test(text) ? text : `'${text.replaceAll("'", String.raw`'\''`)}'`
+  }
+
+  return [commandLineOf(bin, slug, modulePathSegment, endpoint.cli.command.name), ...endpoint.cli.parameters.required.map((name) => `--${name} ${valueOf(name)}`)].join(' ')
+}
 
 // `--help` for one endpoint command
 export const endpointHelp = (bin: string, slug: string, modulePathSegment: string, endpoint: EndpointContract, signInHeader: null | string): string[] => {
@@ -72,6 +127,9 @@ export const endpointHelp = (bin: string, slug: string, modulePathSegment: strin
     'FLAGS',
     ...flags.map((flag) => `  --${flag.name}=<value>  ${flag.description}`),
     '  -h, --help  Show this help',
+    '',
+    'EXAMPLE',
+    `  $ ${exampleCall(bin, slug, modulePathSegment, endpoint)}`,
   ]
 }
 
