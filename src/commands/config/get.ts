@@ -22,6 +22,10 @@ export default class ConfigGet extends Command {
   public async run(): Promise<void> {
     const {args, flags} = await this.parse(ConfigGet)
     const show = (value: string): string => (flags.reveal ? value : maskKey(value))
+    const showCredential = (name: string, value: string): string => {
+      const env = collection?.credentialMeta?.[name]?.env
+      return env ? `$${env} (read on every call)` : show(value)
+    }
 
     let savedConfig: SavedConfig
     try {
@@ -42,7 +46,7 @@ export default class ConfigGet extends Command {
         this.error(`No credential named "${args.key}" saved for collection "${args.slug}".`)
       }
 
-      this.log(show(credentials[args.key]))
+      this.log(showCredential(args.key, credentials[args.key]))
       return
     }
 
@@ -52,6 +56,6 @@ export default class ConfigGet extends Command {
       return
     }
 
-    for (const [key, value] of entries) this.log(`${key}=${show(value)}`)
+    for (const [key, value] of entries) this.log(`${key}=${showCredential(key, value)}`)
   }
 }

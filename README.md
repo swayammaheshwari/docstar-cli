@@ -20,6 +20,14 @@ npm run build
 npm link
 ```
 
+If `npm install -g docstar-cli` fails with `EACCES` (the global npm folder isn't writable), don't use `sudo`: run it without installing
+(`npx docstar-cli <collection> <module> <endpoint>`) or give npm a folder of your own once:
+
+```sh
+mkdir -p ~/.npm-global && npm config set prefix ~/.npm-global
+export PATH="$HOME/.npm-global/bin:$PATH"   # add this line to your shell profile
+```
+
 `npm link` puts `docstar-cli` on your PATH. Alternatively, run it without linking via `node ./bin/run.js <command>` from the repo root.
 
 ## Quick start
@@ -165,13 +173,19 @@ used for MCP sign-in (DocStar lists it with the MCP callback URLs).
 ### API keys
 
 For a header or query param the docs owner marked as an API key, the CLI sends your key: a flag on the
-call (`--authkey <key>`), else the one saved with `config set` or `key save`. It never reads your
-environment or `.env`. Missing in a terminal, it asks for the key (hidden) and offers to save it.
+call (`--authkey <key>`), else the one saved with `config set` or `key save`. A key you keep only in
+`.env` or an environment variable can be referenced instead of stored:
+`docstar-cli config set <slug> Authorization --env HM_TOKEN --prefix Bearer` (the variable is read, from the
+shell or the project's `.env`, on every call; nothing is saved). Missing in a terminal, the CLI asks for the key
+(hidden) and offers to save it.
+
+A body field that takes JSON (`--payload`) must be valid JSON; `--help` says which flags are JSON objects or lists.
 
 ### Exit codes
 
 `0` success, `1` the API answered with an error (4xx/5xx) or the call failed, `4` an API key or sign-in
-is missing (the message says how to add it).
+is missing (the message says how to add it), `2` a required flag is missing with no one to ask (an AI assistant, CI)
+or a flag's value has the wrong shape (the message names the flags).
 
 ## Get an API key (`key request`, `key save`, `key emit`)
 

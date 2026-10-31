@@ -1,7 +1,8 @@
 import {expect} from 'chai'
 
 import {MissingCredentialError} from '../../src/lib/credentials.js'
-import {EXIT_CREDENTIAL_MISSING, ExitSignal, runEndpoint, type RunIo} from '../../src/lib/run.js'
+import {InvalidParamError} from '../../src/lib/http.js'
+import {EXIT_BAD_USAGE, EXIT_CREDENTIAL_MISSING, ExitSignal, runEndpoint, type RunIo} from '../../src/lib/run.js'
 
 const fakeIo = () => {
   const logs: string[] = []
@@ -25,6 +26,24 @@ const exitCodeOf = async (promise: Promise<unknown>): Promise<number | undefined
   )
 
 describe('runEndpoint', () => {
+  it('exits 2 naming the missing flags, without prompting, when nobody is at a keyboard', async () => {
+    const {io} = fakeIo()
+    let calls = 0
+    const code = await exitCodeOf(
+      runEndpoint(io, {execute: async () => (calls++, {body: {}, status: 200})}, {a: '1'}, ['a', 'b', 'c'], {ask: async () => true, canAsk: () => false}),
+    )
+    expect(code).to.equal(EXIT_BAD_USAGE)
+    expect(calls).to.equal(0)
+  })
+
+  it('exits 2 for a value with the wrong shape', async () => {
+    const {io} = fakeIo()
+    const code = await exitCodeOf(
+      runEndpoint(io, {execute: async () => Promise.reject(new InvalidParamError('--payload must be a JSON object'))}, {}, [], {ask: async () => true, canAsk: () => true}),
+    )
+    expect(code).to.equal(EXIT_BAD_USAGE)
+  })
+
   it('asks for every missing credential, however many, then makes the call', async () => {
     const {io, logs} = fakeIo()
     const missing = [

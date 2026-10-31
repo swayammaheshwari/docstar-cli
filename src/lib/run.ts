@@ -1,13 +1,15 @@
 import {confirm, password} from '@inquirer/prompts'
 
 import {maskKey, MissingCredentialError, storeCredential} from './credentials.js'
-import {type ExecuteResult} from './http.js'
+import {type ExecuteResult, InvalidParamError} from './http.js'
 import {promptForMissingParams} from './prompt.js'
 
 // Exit codes: 1 = the API answered with an error (4xx/5xx) or the call failed, 4 = a credential is missing (the message
 // says how to add it). AI assistants and scripts can tell the two apart.
 export const EXIT_API_ERROR = 1
 export const EXIT_CREDENTIAL_MISSING = 4
+// 2 = the call can't be made as typed: a required parameter is missing and nobody can be asked, or a value has the wrong shape
+export const EXIT_BAD_USAGE = 2
 
 // Where a command talks to the user and how it ends: `error` and `exit` stop the command by throwing an ExitSignal
 export type RunIo = {
@@ -70,7 +72,12 @@ export const runEndpoint = async (
   required: string[],
   deps: RunDeps = {ask: askFor, canAsk},
 ): Promise<void> => {
-  Object.assign(params, await promptForMissingParams(required, params))
+  const missingParams = required.filter((name) => params[name] === undefined)
+  if (missingParams.length > 0) {
+    // With no one at a keyboard (an AI assistant, CI) a prompt would abort, so say which flags are missing instead
+    if (!deps.canAsk()) io.error(`Missing required parameter${missingParams.length > 1 ? 's' : ''}: ${missingParams.map((name) => `--${name}`).join(' ')}`, {exit: EXIT_BAD_USAGE})
+    Object.assign(params, await promptForMissingParams(required, params))
+  }
 
   // Each missing credential is asked for once: an endpoint can need any number of API keys plus a sign-in, so there is
   // no fixed number of rounds. Being asked for the same one twice means the answer didn't take, so it stops there.
@@ -84,6 +91,7 @@ export const runEndpoint = async (
       return
     } catch (error) {
       if (error instanceof ExitSignal) throw error
+      if (error instanceof InvalidParamError) io.error(error.message, {exit: EXIT_BAD_USAGE})
       if (!(error instanceof MissingCredentialError)) io.error((error as Error).message, {exit: EXIT_API_ERROR})
       const missing = error as MissingCredentialError
       const id = `${missing.kind}:${missing.name.toLowerCase()}`

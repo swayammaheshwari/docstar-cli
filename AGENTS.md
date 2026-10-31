@@ -135,3 +135,17 @@ change, not as a follow-up someone has to remember to do.
 version number, e.g. `changelog/1.2.0.md`) summarizing what changed — grouped into "New features"
 and "Bug fixes" as appropriate. Do this in the same change as the version bump, not as a
 follow-up.
+
+## Patterns added with 2.0.1
+
+- **Exit codes** (`src/lib/run.ts`): 1 API error, 2 `EXIT_BAD_USAGE` (a required flag is missing and `canAsk()` is false, or an
+  `InvalidParamError` from `buildBody`: a JSON-object body field given non-JSON), 4 credential missing. Prompts only run when
+  `canAsk()` is true; never call an `@inquirer/prompts` function without that check.
+- **Credential references**: `config set <slug> <name> --env VAR [--prefix Bearer]` stores no value (`credentialMeta.env`);
+  `sendableCredentials` reads the variable from the environment or the project's `.env` (`readEnvFile`) on every call and
+  leaves it empty (so it counts as missing) when unset.
+- **Update notice**: oclif commands use `@oclif/plugin-warn-if-update-available`; endpoint commands run outside oclif, so
+  `bin/run.js` calls `noticeIfOutdated` (`src/lib/update-check.ts`: daily cache in `~/.docstar/update-check.json`, refreshed by a
+  detached process, stderr TTY only, never in CI or `mcp`). Switch off with `DOCSTAR_CLI_SKIP_NEW_VERSION_CHECK=1`.
+- **Help** (`src/lib/endpoint-flags.ts`): flags state their shape (JSON object, list, boolean, number) from the docs' body
+  template, name a look-alike twin (`content_type` body field vs `content-type` header), and `--help` ends with an example call.

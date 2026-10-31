@@ -52,6 +52,12 @@ describe('credentials', () => {
     expect((await saved()).collections[0].credentialMeta).to.deep.equal({})
   })
 
+  it('reads a credential saved with --env from the variable on every call, never storing it', () => {
+    const collection = {credentialMeta: {Authorization: {env: 'HM_TOKEN', prefix: 'Bearer'}}, credentials: {Authorization: ''}, modules: [], name: 'x', slug: 'x', updatedAt: ''}
+    expect(sendableCredentials(collection, {HM_TOKEN: 'hm_1'})).to.deep.equal({Authorization: 'Bearer hm_1'})
+    expect(sendableCredentials(collection, {})).to.deep.equal({Authorization: ''})
+  })
+
   it('says when no credential has that name', async () => {
     let message = ''
     await readCredential('msg91', 'missing').catch((error: Error) => {
