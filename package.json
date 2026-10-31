@@ -61,7 +61,7 @@
   },
   "repository": "swayammaheshwari/docstar-cli",
   "scripts": {
-    "build": "tsc -b",
+    "build": "rm -rf dist && tsc -b --force",
     "lint": "eslint",
     "posttest": "npm run lint",
     "prepack": "oclif readme",
