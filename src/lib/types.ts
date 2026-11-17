@@ -78,6 +78,8 @@ export type CollectionSummary = {id: string; name: string; slug: string}
 export type CollectionListResponse = {
   auth?: SignInHint | null
   collection?: CollectionSummary
+  // The collection's hosted MCP server, when the API says (`setup` falls back to https://mcp.docstar.io/connector/<slug>)
+  mcp?: null | {url: string}
   modules: ModuleSummary[]
   rootEndpoints?: RootEndpointSummary[]
 }

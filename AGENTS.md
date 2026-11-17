@@ -90,6 +90,12 @@ and the collection level is what disambiguates them.
   with the env variable and header scheme; `sendableCredentials` puts the scheme in front when requests are made);
   `key emit <slug> <name> --env` writes it to a project's env file. These commands never print the key (last 4
   characters only; `config get` masks too, `--reveal` shows). Format and a reference encrypt function: `docs/key-handoff.md`.
+- `src/commands/setup.ts`, `src/lib/agents.ts`, `src/lib/skill.ts` — `setup <slug>`, the one-command install: global
+  install when run through npx, `init <slug> --all`, the hosted MCP server (`mcp.url` from module.json if the API sends it,
+  else `https://mcp.docstar.io/connector/<slug>`, checked with an `initialize` first: 200 or 401 means it is there) added to
+  each installed AI tool's own config (`agents.ts`; an existing entry with the name is never changed), a `<slug>-api`
+  SKILL.md written to `~/.docstar/skills/` and copied into agents with `npx skills add <dir> -g -y --copy`, then `login`
+  when module.json's `auth` isn't null. It never prompts without a TTY, so an AI agent can run it.
 - `src/lib/slug.ts` — slug rules shared by `init`: `RESERVED_SLUGS` (the CLI's own command names) must match
   hitman-api's `utils/slug.js`, which refuses them when a collection is created.
 - `src/commands/list.ts` — `list` (all installed collections) / `list <collection>` (its modules)
