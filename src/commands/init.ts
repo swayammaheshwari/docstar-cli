@@ -30,6 +30,7 @@ export default class Init extends Command {
   ].join('\n')
   static override examples = ['<%= config.bin %> <%= command.id %> msg91', '<%= config.bin %> <%= command.id %> msg91 --api http://localhost:7072']
   static override flags = {
+    all: Flags.boolean({description: 'Register every module without asking (no checklist), e.g. from a script or `setup`'}),
     api: Flags.string({default: DEFAULT_API, description: 'DocStar API the docs are read from'}),
     'no-alias': Flags.boolean({description: 'Do not create the `<slug>` shortcut command'}),
   }
@@ -65,7 +66,7 @@ export default class Init extends Command {
 
     const SELECT_ALL = '__select_all__'
 
-    const rawSelection = await checkbox({
+    const rawSelection = flags.all ? [SELECT_ALL] : await checkbox({
       choices: [
         ...(rootEndpoints.length > 0
           ? [{

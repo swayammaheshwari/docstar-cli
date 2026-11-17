@@ -22,6 +22,22 @@ npm link
 
 `npm link` puts `docstar-cli` on your PATH. Alternatively, run it without linking via `node ./bin/run.js <command>` from the repo root.
 
+## One command for everything
+
+```sh
+npx docstar-cli setup msg91
+```
+
+Sets up a collection's API in every AI tool on your computer:
+
+1. installs `docstar-cli` (when run through `npx`),
+2. registers every module of the collection, with its `msg91` shortcut,
+3. adds the collection's MCP server (`https://mcp.docstar.io/connector/msg91`) to Claude Code, Cursor, Codex, OpenCode, GitHub Copilot CLI and Factory Droid, where installed,
+4. adds a `msg91-api` skill to your AI agents, saying when and how to use the API,
+5. signs you in, when the collection has a sign-in.
+
+Nothing already set up is changed. `--dry-run` shows what would change first; `--mcp-url <url>` gives the MCP URL when it is on the owner's own domain; `--skip-install`, `--skip-init`, `--skip-mcp`, `--skip-skill` and `--no-login` skip a step.
+
 ## Quick start
 
 ### 1. Run any collection — no setup
